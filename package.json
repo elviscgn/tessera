@@ -1,0 +1,26 @@
+{
+  "name": "tessera",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": "24.18.1",
+    "pnpm": "11.19.0"
+  },
+  "scripts": {
+    "tool:versions": "node --version && pnpm --version && tsc --version && vite --version && vitest --version && eslint --version && prettier --version"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.13.3",
+    "eslint": "10.8.0",
+    "globals": "17.7.0",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.65.0",
+    "vite": "8.1.5",
+    "vitest": "4.1.10"
+  }
+}
