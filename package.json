@@ -18,7 +18,11 @@
     "check:rust": "cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings && cargo test --manifest-path rust/Cargo.toml --workspace --all-targets",
     "check:wasm": "cargo build --manifest-path rust/Cargo.toml -p tessera-wasm --target wasm32-unknown-unknown",
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:js": "pnpm check:format && pnpm lint && pnpm typecheck && pnpm test",
+    "check": "pnpm check:js && pnpm check:rust && pnpm check:wasm && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
