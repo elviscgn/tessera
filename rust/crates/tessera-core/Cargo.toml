@@ -5,5 +5,9 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[dependencies]
+blake3 = { version = "=1.8.5", default-features = false }
+rand_chacha = { version = "=0.10.0", default-features = false }
+
 [lints]
 workspace = true
