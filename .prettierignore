@@ -2,6 +2,7 @@ PLAN.md
 AGENTS.md
 CURRENT_TASK.md
 pnpm-lock.yaml
+pnpm-workspace.yaml
 rust/Cargo.lock
 node_modules/
 dist/

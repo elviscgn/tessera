@@ -16,7 +16,9 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "check:rust": "cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings && cargo test --manifest-path rust/Cargo.toml --workspace --all-targets",
-    "check:wasm": "cargo build --manifest-path rust/Cargo.toml -p tessera-wasm --target wasm32-unknown-unknown"
+    "check:wasm": "cargo build --manifest-path rust/Cargo.toml -p tessera-wasm --target wasm32-unknown-unknown",
+    "dev": "vite",
+    "build": "vite build"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
