@@ -9,6 +9,6 @@ Milestone 0 tests prove reproducible project foundations only:
 - Vitest checks committed tool and repository metadata.
 - Vite production build smoke checks the Scenario Lab shell and dedicated Worker bundle.
 
-Run the aggregate `pnpm check` from the repository root after the foundation scripts exist. Keep generated output ignored and inspect the staged file list before committing. Milestone 0 does not install Playwright, launch browsers, compare visuals, test gameplay, or add a test bridge.
+Run the aggregate `pnpm check` from the repository root after the pinned dependencies are installed. It expands to `pnpm check:format`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm check:rust`, `pnpm check:wasm`, and `pnpm build`. Keep generated output ignored and inspect the staged file list before committing. Milestone 0 does not install Playwright, launch browsers, compare visuals, test gameplay, or add a test bridge.
 
 Later milestones add native/Wasm parity, protocol fixtures, Worker boundary tests, Playwright flows, Chromium visuals, Firefox/WebKit smoke coverage, performance harnesses, lifecycle checks, and an isolated external consumer. Those checks must not be backfilled into this foundation checkpoint.
