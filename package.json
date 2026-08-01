@@ -10,7 +10,13 @@
     "pnpm": "11.19.0"
   },
   "scripts": {
-    "tool:versions": "node --version && pnpm --version && tsc --version && vite --version && vitest --version && eslint --version && prettier --version"
+    "tool:versions": "node --version && pnpm --version && tsc --version && vite --version && vitest --version && eslint --version && prettier --version",
+    "format": "prettier . --write && cargo fmt --manifest-path rust/Cargo.toml --all",
+    "check:format": "prettier . --check && cargo fmt --manifest-path rust/Cargo.toml --all -- --check",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
+    "check:rust": "cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings && cargo test --manifest-path rust/Cargo.toml --workspace --all-targets",
+    "check:wasm": "cargo build --manifest-path rust/Cargo.toml -p tessera-wasm --target wasm32-unknown-unknown"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
