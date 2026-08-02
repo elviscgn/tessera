@@ -6,13 +6,14 @@
  * caller exposes bytes to a renderer or acknowledges authoritative events.
  */
 
-export const RENDER_HEADER_LENGTH = 64;
-export const RENDER_REGION_DESCRIPTOR_LENGTH = 32;
-export const RENDER_DESCRIPTOR_LENGTH = 32;
-export const EVENT_HEADER_LENGTH = 48;
-export const EVENT_RECORD_HEADER_LENGTH = 8;
+const RENDER_HEADER_LENGTH = 64;
+const RENDER_REGION_DESCRIPTOR_LENGTH = 32;
+const RENDER_DESCRIPTOR_LENGTH = 32;
+const EVENT_HEADER_LENGTH = 48;
+const EVENT_RECORD_HEADER_LENGTH = 8;
 export const MAX_EVENT_RECORD_COUNT = 1024;
-export const MAX_EVENT_BATCH_BYTES = 1024 * 1024;
+const MAX_EVENT_BATCH_BYTES = 1024 * 1024;
+const OCCUPIED_CELL_REGION_KIND = 10;
 
 const PROTOCOL_VERSION = 1;
 const RENDER_MAGIC = new Uint8Array([0x54, 0x53, 0x52, 0x4e, 0x44, 0x30, 0x30, 0x31]);
@@ -77,6 +78,33 @@ export interface RenderSnapshotMetadata {
   readonly regions: readonly RenderRegionMetadata[];
 }
 
+export interface RenderGridCell {
+  readonly x: number;
+  readonly z: number;
+  readonly elevationMm: number;
+}
+
+export interface RenderEntityRecord {
+  readonly slot: number;
+  readonly generation: number;
+  readonly x: number;
+  readonly z: number;
+  readonly elevationMm: number;
+  readonly rotation: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+    readonly w: number;
+  };
+  readonly scale: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  };
+  readonly visualType: number;
+  readonly renderFlags: number;
+}
+
 export const decodeRenderMemoryDescriptor = (
   input: ArrayBuffer | Uint8Array,
 ): RenderMemoryDescriptor => {
@@ -107,15 +135,23 @@ export const decodeRenderMemoryDescriptor = (
   };
 };
 
-export const decodeRenderSnapshot = (input: ArrayBuffer | Uint8Array): RenderSnapshotMetadata => {
-  const bytes = asBytes(input);
+interface RenderHeader {
+  readonly view: DataView;
+  readonly totalByteLength: number;
+  readonly entityCount: number;
+  readonly entityCapacity: number;
+  readonly regionCount: number;
+  readonly descriptorSize: number;
+  readonly regionTableEnd: number;
+}
+
+const validateRenderHeaderPrefix = (bytes: Uint8Array, view: DataView): number => {
   if (bytes.byteLength < RENDER_HEADER_LENGTH) {
     throw new Error('render snapshot is truncated');
   }
   if (!equalMagic(bytes, RENDER_MAGIC)) {
     throw new Error('render snapshot magic is invalid');
   }
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (view.getUint16(8, true) !== PROTOCOL_VERSION) {
     throw new Error('render snapshot protocol version is unsupported');
   }
@@ -126,11 +162,31 @@ export const decodeRenderSnapshot = (input: ArrayBuffer | Uint8Array): RenderSna
   if (totalByteLength !== bytes.byteLength) {
     throw new Error('render snapshot total length is invalid');
   }
+  return totalByteLength;
+};
+
+const validateRenderEntityCounts = (
+  view: DataView,
+): {
+  readonly entityCount: number;
+  readonly entityCapacity: number;
+} => {
   const entityCount = view.getUint32(40, true);
   const entityCapacity = view.getUint32(44, true);
   if (entityCount > entityCapacity) {
     throw new Error('render snapshot entity count exceeds capacity');
   }
+  return { entityCount, entityCapacity };
+};
+
+const readRenderRegionTable = (
+  view: DataView,
+  totalByteLength: number,
+): {
+  readonly regionCount: number;
+  readonly descriptorSize: number;
+  readonly regionTableEnd: number;
+} => {
   const regionCount = view.getUint16(52, true);
   const descriptorSize = view.getUint16(54, true);
   const regionTableOffset = view.getUint32(56, true);
@@ -146,71 +202,268 @@ export const decodeRenderSnapshot = (input: ArrayBuffer | Uint8Array): RenderSna
   if (regionTableOffset < RENDER_HEADER_LENGTH || regionTableEnd > totalByteLength) {
     throw new Error('render region table is outside the header');
   }
+  return { regionCount, descriptorSize, regionTableEnd };
+};
 
-  const regions: RenderRegionMetadata[] = [];
-  const intervals: Array<{ readonly start: number; readonly end: number }> = [];
-  for (let index = 0; index < regionCount; index += 1) {
-    const offset = regionTableOffset + index * descriptorSize;
-    const kind = view.getUint16(offset, true);
-    const scalarType = view.getUint8(offset + 2);
-    const componentCount = view.getUint8(offset + 3);
-    if (componentCount === 0) {
-      throw new Error(`render region ${index} has no components`);
-    }
-    const byteLength = view.getUint32(offset + 16, true);
-    const capacity = view.getUint32(offset + 20, true);
-    const regionOffset = view.getUint32(offset + 8, true);
-    const elementCount = view.getUint32(offset + 12, true);
-    const width = scalarWidth(scalarType);
-    const expectedLength = elementCount * componentCount * width;
-    if (!Number.isSafeInteger(expectedLength) || byteLength !== expectedLength) {
-      throw new Error(`render region ${index} byte length is invalid`);
-    }
-    if (capacity < byteLength) {
-      throw new Error(`render region ${index} capacity is too small`);
-    }
-    const regionEnd = checkedEnd(
-      regionOffset,
-      byteLength,
-      totalByteLength,
-      `render region ${index}`,
-    );
-    const capacityEnd = checkedEnd(
-      regionOffset,
-      capacity,
-      totalByteLength,
-      `render region ${index} capacity`,
-    );
-    if (regionOffset < regionTableEnd) {
-      throw new Error(`render region ${index} overlaps the descriptor table`);
-    }
-    for (const interval of intervals) {
-      if (regionOffset < interval.end && capacityEnd > interval.start) {
-        throw new Error(`render region ${index} overlaps another region`);
-      }
-    }
-    intervals.push({ start: regionOffset, end: Math.max(regionEnd, capacityEnd) });
-    regions.push({
-      kind,
-      scalarType,
-      componentCount,
-      flags: view.getUint32(offset + 4, true),
-      offset: regionOffset,
-      elementCount,
-      byteLength,
-      capacity,
-    });
-  }
-  return {
+const readRenderHeader = (input: ArrayBuffer | Uint8Array): RenderHeader => {
+  const bytes = asBytes(input);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const totalByteLength = validateRenderHeaderPrefix(bytes, view);
+  const { entityCount, entityCapacity } = validateRenderEntityCounts(view);
+  const { regionCount, descriptorSize, regionTableEnd } = readRenderRegionTable(
+    view,
     totalByteLength,
-    worldGeneration: view.getUint32(20, true),
-    snapshotGeneration: view.getBigUint64(24, true),
-    simulationTick: view.getBigUint64(32, true),
+  );
+
+  return {
+    view,
+    totalByteLength,
     entityCount,
     entityCapacity,
-    memoryGeneration: view.getUint32(48, true),
+    regionCount,
+    descriptorSize,
+    regionTableEnd,
+  };
+};
+
+const decodeRenderRegion = (
+  view: DataView,
+  totalByteLength: number,
+  regionTableEnd: number,
+  regionTableOffset: number,
+  descriptorSize: number,
+  index: number,
+  intervals: Array<{ readonly start: number; readonly end: number }>,
+): RenderRegionMetadata => {
+  const offset = regionTableOffset + index * descriptorSize;
+  const kind = view.getUint16(offset, true);
+  const scalarType = view.getUint8(offset + 2);
+  const componentCount = view.getUint8(offset + 3);
+  if (componentCount === 0) {
+    throw new Error(`render region ${index} has no components`);
+  }
+  const byteLength = view.getUint32(offset + 16, true);
+  const capacity = view.getUint32(offset + 20, true);
+  const regionOffset = view.getUint32(offset + 8, true);
+  const elementCount = view.getUint32(offset + 12, true);
+  const expectedLength = elementCount * componentCount * scalarWidth(scalarType);
+  if (!Number.isSafeInteger(expectedLength) || byteLength !== expectedLength) {
+    throw new Error(`render region ${index} byte length is invalid`);
+  }
+  if (capacity < byteLength) {
+    throw new Error(`render region ${index} capacity is too small`);
+  }
+  const regionEnd = checkedEnd(regionOffset, byteLength, totalByteLength, `render region ${index}`);
+  const capacityEnd = checkedEnd(
+    regionOffset,
+    capacity,
+    totalByteLength,
+    `render region ${index} capacity`,
+  );
+  if (regionOffset < regionTableEnd) {
+    throw new Error(`render region ${index} overlaps the descriptor table`);
+  }
+  if (intervals.some((interval) => regionOffset < interval.end && capacityEnd > interval.start)) {
+    throw new Error(`render region ${index} overlaps another region`);
+  }
+  intervals.push({ start: regionOffset, end: Math.max(regionEnd, capacityEnd) });
+  return {
+    kind,
+    scalarType,
+    componentCount,
+    flags: view.getUint32(offset + 4, true),
+    offset: regionOffset,
+    elementCount,
+    byteLength,
+    capacity,
+  };
+};
+
+const decodeRenderRegions = (header: RenderHeader): readonly RenderRegionMetadata[] => {
+  const regions: RenderRegionMetadata[] = [];
+  const intervals: Array<{ readonly start: number; readonly end: number }> = [];
+  const kinds = new Set<number>();
+  const regionTableOffset = header.view.getUint32(56, true);
+  for (let index = 0; index < header.regionCount; index += 1) {
+    const region = decodeRenderRegion(
+      header.view,
+      header.totalByteLength,
+      header.regionTableEnd,
+      regionTableOffset,
+      header.descriptorSize,
+      index,
+      intervals,
+    );
+    if (kinds.has(region.kind)) {
+      throw new Error(`render region kind ${region.kind} is duplicated`);
+    }
+    kinds.add(region.kind);
+    regions.push(region);
+  }
+  return regions;
+};
+
+export const decodeRenderSnapshot = (input: ArrayBuffer | Uint8Array): RenderSnapshotMetadata => {
+  const header = readRenderHeader(input);
+  const regions = decodeRenderRegions(header);
+
+  return {
+    totalByteLength: header.totalByteLength,
+    worldGeneration: header.view.getUint32(20, true),
+    snapshotGeneration: header.view.getBigUint64(24, true),
+    simulationTick: header.view.getBigUint64(32, true),
+    entityCount: header.entityCount,
+    entityCapacity: header.entityCapacity,
+    memoryGeneration: header.view.getUint32(48, true),
     regions,
   };
+};
+
+/** Reads the optional authoritative occupancy region without exposing raw buffers. */
+export const decodeOccupiedCells = (
+  input: ArrayBuffer | Uint8Array,
+  metadata: RenderSnapshotMetadata = decodeRenderSnapshot(input),
+): readonly RenderGridCell[] => {
+  const region = metadata.regions.find(({ kind }) => kind === OCCUPIED_CELL_REGION_KIND);
+  if (region === undefined) {
+    return [];
+  }
+  if (region.scalarType !== 4 || region.componentCount !== 3) {
+    throw new Error('occupied cell render region has an invalid scalar layout');
+  }
+  const bytes = asBytes(input);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const cells: RenderGridCell[] = [];
+  for (let index = 0; index < region.elementCount; index += 1) {
+    const offset = region.offset + index * 12;
+    cells.push({
+      x: view.getInt32(offset, true),
+      z: view.getInt32(offset + 4, true),
+      elevationMm: view.getInt32(offset + 8, true),
+    });
+  }
+  return cells;
+};
+
+const requiredRegion = (
+  metadata: RenderSnapshotMetadata,
+  kind: number,
+  label: string,
+): RenderRegionMetadata => {
+  const region = metadata.regions.find((candidate) => candidate.kind === kind);
+  if (region === undefined) {
+    throw new Error(`render snapshot is missing the ${label} region`);
+  }
+  if (region.elementCount !== metadata.entityCount) {
+    throw new Error(`render ${label} region count does not match the entity count`);
+  }
+  return region;
+};
+
+const assertRegionLayout = (
+  region: RenderRegionMetadata,
+  scalarType: number,
+  componentCount: number,
+  label: string,
+): void => {
+  if (region.scalarType !== scalarType || region.componentCount !== componentCount) {
+    throw new Error(`render ${label} region has an invalid scalar layout`);
+  }
+};
+
+const readEntityRegions = (
+  input: ArrayBuffer | Uint8Array,
+  metadata: RenderSnapshotMetadata,
+): {
+  readonly view: DataView;
+  readonly slots: RenderRegionMetadata;
+  readonly generations: RenderRegionMetadata;
+  readonly positions: RenderRegionMetadata;
+  readonly rotations: RenderRegionMetadata;
+  readonly scales: RenderRegionMetadata;
+  readonly visualTypes: RenderRegionMetadata;
+  readonly renderFlags: RenderRegionMetadata;
+} => {
+  const bytes = asBytes(input);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const slots = requiredRegion(metadata, 1, 'entity slot');
+  const generations = requiredRegion(metadata, 2, 'entity generation');
+  const positions = requiredRegion(metadata, 3, 'position');
+  const rotations = requiredRegion(metadata, 4, 'rotation');
+  const scales = requiredRegion(metadata, 5, 'scale');
+  const visualTypes = requiredRegion(metadata, 6, 'visual type');
+  const renderFlags = requiredRegion(metadata, 7, 'render flags');
+  assertRegionLayout(slots, 3, 1, 'entity slot');
+  assertRegionLayout(generations, 3, 1, 'entity generation');
+  assertRegionLayout(positions, 4, 3, 'position');
+  assertRegionLayout(rotations, 5, 4, 'rotation');
+  assertRegionLayout(scales, 5, 3, 'scale');
+  assertRegionLayout(visualTypes, 3, 1, 'visual type');
+  assertRegionLayout(renderFlags, 3, 1, 'render flags');
+  return {
+    view,
+    slots,
+    generations,
+    positions,
+    rotations,
+    scales,
+    visualTypes,
+    renderFlags,
+  };
+};
+
+const readEntityRecord = (
+  regions: ReturnType<typeof readEntityRegions>,
+  index: number,
+): RenderEntityRecord => {
+  const { view, slots, generations, positions, rotations, scales, visualTypes, renderFlags } =
+    regions;
+  const slot = view.getUint32(slots.offset + index * 4, true);
+  const generation = view.getUint32(generations.offset + index * 4, true);
+  if (generation === 0) {
+    throw new Error(`render entity ${index} has an invalid generation`);
+  }
+  const positionOffset = positions.offset + index * 12;
+  const rotationOffset = rotations.offset + index * 16;
+  const scaleOffset = scales.offset + index * 12;
+  return {
+    slot,
+    generation,
+    x: view.getInt32(positionOffset, true),
+    z: view.getInt32(positionOffset + 4, true),
+    elevationMm: view.getInt32(positionOffset + 8, true),
+    rotation: {
+      x: view.getFloat32(rotationOffset, true),
+      y: view.getFloat32(rotationOffset + 4, true),
+      z: view.getFloat32(rotationOffset + 8, true),
+      w: view.getFloat32(rotationOffset + 12, true),
+    },
+    scale: {
+      x: view.getFloat32(scaleOffset, true),
+      y: view.getFloat32(scaleOffset + 4, true),
+      z: view.getFloat32(scaleOffset + 8, true),
+    },
+    visualType: view.getUint32(visualTypes.offset + index * 4, true),
+    renderFlags: view.getUint32(renderFlags.offset + index * 4, true),
+  };
+};
+
+/** Decodes the entity transform regions before the transferable buffer returns to the Worker. */
+export const decodeRenderEntities = (
+  input: ArrayBuffer | Uint8Array,
+  metadata: RenderSnapshotMetadata = decodeRenderSnapshot(input),
+): readonly RenderEntityRecord[] => {
+  const regions = readEntityRegions(input, metadata);
+  const entities: RenderEntityRecord[] = [];
+  const slots = new Set<number>();
+  for (let index = 0; index < metadata.entityCount; index += 1) {
+    const entity = readEntityRecord(regions, index);
+    if (!slots.add(entity.slot)) {
+      throw new Error(`render snapshot repeats entity slot ${entity.slot}`);
+    }
+    entities.push(entity);
+  }
+  return entities;
 };
 
 export const patchRenderMemoryGeneration = (buffer: ArrayBuffer, generation: number): void => {
@@ -246,7 +499,16 @@ const eventPayloadLength = (opcode: number): number => {
   }
 };
 
-export const decodeEventBatch = (input: ArrayBuffer | Uint8Array): EventBatchMetadata => {
+interface EventHeader {
+  readonly bytes: Uint8Array;
+  readonly view: DataView;
+  readonly firstSequence: bigint;
+  readonly lastSequence: bigint;
+  readonly recordCount: number;
+  readonly ackFloor: bigint;
+}
+
+const readEventHeader = (input: ArrayBuffer | Uint8Array): EventHeader => {
   const bytes = asBytes(input);
   if (bytes.byteLength < EVENT_HEADER_LENGTH || bytes.byteLength > MAX_EVENT_BATCH_BYTES) {
     throw new Error('event batch length is invalid');
@@ -271,11 +533,16 @@ export const decodeEventBatch = (input: ArrayBuffer | Uint8Array): EventBatchMet
   if (recordCount > MAX_EVENT_RECORD_COUNT) {
     throw new Error('event batch record count exceeds the limit');
   }
+  return { bytes, view, firstSequence, lastSequence, recordCount, ackFloor };
+};
+
+const validateEventSequenceRange = (header: EventHeader): void => {
+  const { bytes, firstSequence, lastSequence, recordCount } = header;
   if (recordCount === 0) {
     if (firstSequence !== 0n || lastSequence !== 0n || bytes.byteLength !== EVENT_HEADER_LENGTH) {
       throw new Error('empty event batch metadata is invalid');
     }
-    return { firstSequence, lastSequence, ackFloor, recordCount };
+    return;
   }
   if (firstSequence === 0n || lastSequence < firstSequence) {
     throw new Error('event batch sequence range is invalid');
@@ -283,27 +550,48 @@ export const decodeEventBatch = (input: ArrayBuffer | Uint8Array): EventBatchMet
   if (lastSequence - firstSequence + 1n !== BigInt(recordCount)) {
     throw new Error('event batch sequence range is not contiguous');
   }
-  let offset = EVENT_HEADER_LENGTH;
-  for (let index = 0; index < recordCount; index += 1) {
-    checkedEnd(offset, EVENT_RECORD_HEADER_LENGTH, bytes.byteLength, 'event record header');
-    const opcode = view.getUint16(offset, true);
-    if (view.getUint16(offset + 2, true) !== 0) {
-      throw new Error('event record flags are unsupported');
-    }
-    const payloadLength = view.getUint32(offset + 4, true);
-    if (payloadLength !== eventPayloadLength(opcode)) {
-      throw new Error(`event record ${index} payload length is invalid`);
-    }
-    const payloadStart = offset + EVENT_RECORD_HEADER_LENGTH;
-    const payloadEnd = checkedEnd(payloadStart, payloadLength, bytes.byteLength, 'event record');
-    const sequence = view.getBigUint64(payloadStart, true);
-    if (sequence !== firstSequence + BigInt(index)) {
-      throw new Error(`event record ${index} sequence is not contiguous`);
-    }
-    offset = payloadEnd;
+};
+
+const decodeEventRecord = (header: EventHeader, offset: number, index: number): number => {
+  const { bytes, view, firstSequence } = header;
+  checkedEnd(offset, EVENT_RECORD_HEADER_LENGTH, bytes.byteLength, 'event record header');
+  const opcode = view.getUint16(offset, true);
+  if (view.getUint16(offset + 2, true) !== 0) {
+    throw new Error('event record flags are unsupported');
   }
-  if (offset !== bytes.byteLength) {
+  const payloadLength = view.getUint32(offset + 4, true);
+  if (payloadLength !== eventPayloadLength(opcode)) {
+    throw new Error(`event record ${index} payload length is invalid`);
+  }
+  const payloadStart = offset + EVENT_RECORD_HEADER_LENGTH;
+  const payloadEnd = checkedEnd(payloadStart, payloadLength, bytes.byteLength, 'event record');
+  const sequence = view.getBigUint64(payloadStart, true);
+  if (sequence !== firstSequence + BigInt(index)) {
+    throw new Error(`event record ${index} sequence is not contiguous`);
+  }
+  return payloadEnd;
+};
+
+const decodeEventRecords = (header: EventHeader): void => {
+  let offset = EVENT_HEADER_LENGTH;
+  for (let index = 0; index < header.recordCount; index += 1) {
+    offset = decodeEventRecord(header, offset, index);
+  }
+  if (offset !== header.bytes.byteLength) {
     throw new Error('event batch has trailing bytes');
   }
-  return { firstSequence, lastSequence, ackFloor, recordCount };
+};
+
+export const decodeEventBatch = (input: ArrayBuffer | Uint8Array): EventBatchMetadata => {
+  const header = readEventHeader(input);
+  validateEventSequenceRange(header);
+  if (header.recordCount > 0) {
+    decodeEventRecords(header);
+  }
+  return {
+    firstSequence: header.firstSequence,
+    lastSequence: header.lastSequence,
+    ackFloor: header.ackFloor,
+    recordCount: header.recordCount,
+  };
 };

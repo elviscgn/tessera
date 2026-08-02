@@ -30,7 +30,7 @@ rustc --version
 rustup target list --installed
 ```
 
-Install the pinned `wasm-pack` in the repository-local tools directory:
+Install the pinned `wasm-pack` in the repository-local tools directory. Fallow 3.10.0 is installed by the frozen JavaScript dependency install; it does not need a separate global installation.
 
 ```sh
 cargo install wasm-pack --version 0.15.0 --locked --root .tools/wasm-pack-0.15.0

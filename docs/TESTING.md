@@ -9,6 +9,7 @@ Use the smallest command that answers the question while developing:
 ```sh
 pnpm test
 pnpm typecheck
+pnpm quality:fallow
 cargo test --manifest-path rust/Cargo.toml --workspace --all-targets
 ```
 
@@ -18,7 +19,9 @@ Before committing a coherent change, run the complete gate:
 pnpm check
 ```
 
-`pnpm check` runs formatting, linting, strict TypeScript, Vitest, Rust Clippy/tests, the reproducible Wasm build, and the Vite production build.
+`pnpm check` runs formatting, linting, strict TypeScript, Vitest, the pinned Fallow structural audit, Rust Clippy/tests, the reproducible Wasm build, and the Vite production build.
+
+Fallow checks the TypeScript and JavaScript module graph for introduced dead code, duplication, and complexity. It complements ESLint and TypeScript; Rust determinism, protocol validity, native/Wasm parity, and browser behaviour still require their dedicated tests. Inline Fallow suppressions and Fallow config files are intentionally rejected by the repository policy check.
 
 ## Native simulation
 
@@ -30,7 +33,8 @@ The Rust suite covers the rules that must be identical in native and browser run
 - ChaCha8 reference vectors and seeded random commands;
 - canonical BLAKE3 hashes;
 - replay across idle ticks and rejected replay order;
-- grid, occupancy, footprints, serialization, migration, and invariants as those systems land.
+- normalized footprints, rotated cell expansion, atomic occupancy claims, overlap rejection, move/remove release, and entity/occupancy invariants;
+- serialization, migration, and persistence fixtures as those systems land.
 
 The protocol crate also tests little-endian command/event/render records, lengths, flags, opcodes, region descriptors, and contiguous event sequences.
 
@@ -50,15 +54,15 @@ The Worker checks that:
 
 ## Browser checks
 
-The Scenario Lab is the first browser smoke target. At the current lifecycle milestone it checks the canvas, Babylon scene, render loop, Worker readiness, packed snapshot delivery, event acknowledgement, memory-generation diagnostics, and disposal on `pagehide`.
+The Scenario Lab is the first browser smoke target. It checks the canvas, Babylon scene, orthographic camera, named pan/zoom/rotation actions, screen-to-grid readout, render loop, Worker readiness, packed snapshot delivery, event acknowledgement, memory-generation diagnostics, entity picking, selected-ID display, screen-space bounds, and disposal on `pagehide`.
 
 The probe uses structured `data-tessera-*` attributes so browser tests can assert ticks, hashes, sequence numbers, buffer ownership, and render generations without relying on timing or pixels alone. The known native/Wasm probe hash is:
 
 ```text
-24ebdfb8bf10251c184a2bcd57d48a6b7d77be51114fbcf75847f77f32adb104
+1d58e8e0cf937e92279a5206ca3d4e8d24b046b9545568695bc262dd0ed4967c
 ```
 
-Camera, grid, selection, placement, save/load, visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
+The render probe also validates the authoritative occupied-cell region, entity transform regions, and their typed-array decoders. Unit coverage rejects malformed entity layouts, duplicate slots, invalid generations, and stale selection handles. Browser smoke selects the rendered probe entity and checks that its `slot:generation` ID and canvas-relative bounds appear in the lab. Placement, save/load, visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
 
 ## Visual tests
 

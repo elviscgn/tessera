@@ -22,15 +22,17 @@
     "check:wasm": "pnpm build:wasm",
     "dev": "vite",
     "build": "pnpm build:wasm && vite build",
+    "quality:fallow": "node scripts/check-fallow-policy.mjs && fallow audit --format compact --fail-on-issues",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:js": "pnpm check:format && pnpm lint && pnpm typecheck && pnpm test",
+    "check:js": "pnpm check:format && pnpm lint && pnpm typecheck && pnpm test && pnpm quality:fallow",
     "check": "pnpm check:js && pnpm check:rust && pnpm check:wasm && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "24.13.3",
     "eslint": "10.8.0",
+    "fallow": "3.10.0",
     "globals": "17.7.0",
     "prettier": "3.9.6",
     "typescript": "6.0.3",

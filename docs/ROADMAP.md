@@ -9,12 +9,13 @@ Tessera is delivered in small checkpoints so each release keeps a clear, reviewa
 - **Milestone 2A — Wasm/Worker command boundary:** explicit web-target Wasm startup, versioned commands, bounded tick calls, structured errors, and native/Wasm hash parity.
 - **Milestone 2B — packed data boundary:** render snapshots, reliable event batches, transferable buffers, memory-growth recovery, and parity fixtures.
 - **Milestone 3 — renderer lifecycle:** Babylon engine and scene ownership, Worker readiness, placeholder rendering, diagnostics, and idempotent disposal.
+- **Milestone 4 — isometric camera and coordinates:** right-handed orthographic projection, four rotations, pan/zoom/focus, floor-based grid conversion, and the camera laboratory.
+- **Milestone 5 — grid and occupancy:** normalized integer footprints, deterministic occupancy claims, atomic move/remove updates, invariant checks, and the packed debug-grid projection.
+- **Milestone 6 — picking and selection:** packed entity transforms, stable slot/generation IDs, canvas picking, screen-space bounds, stale-generation protection, and deterministic readiness/tick/render waits.
 
 ## Next
 
-**Milestone 4 — isometric camera and coordinate conversion** is the next implementation checkpoint. It will establish the right-handed orthographic camera, four rotations, pan and zoom, focus, and screen/world/grid conversion rules.
-
-No work from Milestone 4 has started in the current checkpoint.
+**Milestone 7 — placement** is the next implementation checkpoint. It will add preview state, Rust validation, placement/removal commands, and replay coverage.
 
 ## Planned checkpoints
 
@@ -25,7 +26,7 @@ No work from Milestone 4 has started in the current checkpoint.
 | 7         | Placement preview, Rust validation, placement/removal commands, and replay                                           |
 | 8         | Entity-to-visual reconciliation, grouping, removal, reset generations, and stale-map diagnostics                     |
 | 9         | Snapshots, replay, save/load, schema checks, migrations, and parity fixtures                                         |
-| 10        | Development diagnostics, stable waits, annotated overlays, and reproduction bundles                                  |
+| 10        | Development diagnostics, annotated overlays, and reproduction bundles                                                |
 | 11        | Scenario Lab and its deterministic camera, placement, stress, persistence, visual, error, and lifecycle laboratories |
 | 12        | Playwright flows, Chromium visual regression, production smoke, and Firefox/WebKit compatibility smoke               |
 | 13        | Native/browser performance harnesses, cleanup checks, baselines, and optimization evidence                           |

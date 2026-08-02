@@ -59,6 +59,8 @@ The workspace has four crates from the beginning:
 
 The core uses a generational arena and parallel component stores. An entity is `(slot: u32, generation: u32)`, and renderer mappings reject a stale generation. Active slots are visited in a stable order. This keeps mutation straightforward while making replay, serialization, and native/Wasm comparison explicit.
 
+Placement is indexed separately from the entity arena. A normalized `Footprint` stores sorted integer offsets, and an `OccupancyGrid` maps each expanded `(x, z, elevation)` cell to one generational entity ID. Spawn, move, and remove validate the complete candidate set before mutating either store; a failed claim emits a rejection and leaves the world unchanged. The registry accepts object-specific footprints before work starts and falls back to a one-cell footprint for unregistered object types.
+
 ## Authority and determinism
 
 The simulation runs at a fixed 20 Hz. Rust advances ticks; the browser only requests commands, pause/resume, exact steps, or a speed setting. Live commands carry monotonic client sequences and are scheduled for the next unstarted tick. Ordering is `(scheduled tick, client sequence, batch order)`.
@@ -87,21 +89,32 @@ The initial render pool has three reusable buffers with power-of-two capacities.
 
 Babylon imports are modular, with the glTF loader registered separately. The scene is right-handed and follows glTF conventions: `+X` east, `+Y` up, `+Z` south, and one Babylon unit per metre. Asset pivots are bottom-centred. Camera and footprint rotations are four clockwise quarter-turns.
 
-The renderer owns the engine, scene, camera, lights, materials, meshes, observers, resize listener, and render loop. It records render frames and the last validated snapshot metadata, but it does not own authoritative entities. Later synchronization work will reconcile visual records by slot and generation; a Babylon mesh will never be used to infer gameplay state.
+The renderer owns the engine, scene, camera, lights, materials, meshes, observers, resize listener, and render loop. It records render frames and the last validated snapshot metadata, but it does not own authoritative entities. Render records are keyed by slot and checked against generation before a pick or bounds query is accepted; a Babylon mesh is never used to infer gameplay state.
+
+The public selection path returns an opaque `EntityId` whose canonical representation is `slot:generation`. Babylon performs the hit test against the current visual map, while Rust remains the source of entity existence and generation. Screen-space bounds are projected from the visual's world-space corners into CSS-pixel coordinates relative to the canvas. If a slot is reused with a new generation, the old mapping is discarded and any stale selection is cleared.
+
+The runtime also exposes explicit readiness, simulation-tick, rendered-tick, render-generation, and no-pending-error waits. These waits resolve from observed Worker and renderer state rather than from arbitrary delays, so browser tests and consumer UI can synchronize without taking ownership of the clock.
 
 The project starts with ordinary Babylon instances because they support per-instance transforms and picking. Thin instances remain a measured performance experiment, not a default.
 
+The camera is a right-handed orthographic projection aligned with glTF. `+X` is east, `+Y` is up, and `+Z` is south. The presentation camera uses a mathematically symmetric isometric pitch, four clockwise quarter-turns, a target measured in millimetres, and a zoom expressed as visible tile height. Its pure `CameraProjection` model is shared by Babylon synchronization, screen/world/grid conversion, and the coordinate laboratory. Negative world boundaries use floor division, so `-1 mm` belongs to cell `-1` for a `1,000 mm` tile. Camera state remains presentation state and cannot affect Rust hashes or commands.
+
 ## Current implementation
 
-Milestone 3 provides the lifecycle foundation:
+Milestones 3 through 5 provide the lifecycle, camera, and occupancy foundation:
 
-- `FoundationRuntime` owns one Worker, one renderer, listeners, pending requests, readiness, diagnostics, and disposal;
-- `BabylonRenderer` creates a WebGL2 engine, right-handed scene, temporary camera, light, and one non-pickable placeholder box;
+- `FoundationRuntime` owns one Worker, one renderer, listeners, pending requests, readiness, diagnostics, selection subscriptions, deterministic waits, and disposal;
+- `BabylonRenderer` creates a WebGL2 engine, right-handed scene, camera, light, the foundation overlays, and slot/generation-keyed entity visuals;
 - packed event and render messages are validated before the renderer sees them;
 - fatal startup, protocol, Worker, and renderer errors close the runtime and reject pending work;
 - `dispose()` is idempotent, including the Scenario Lab `pagehide` path.
+- `CameraProjection` provides deterministic grid centres, floor-based cell lookup, four rotations, pan/zoom/focus, and ray-plane conversion;
+- the Babylon camera is orthographic and follows the projection model, while Scenario Lab exposes named camera actions and coordinate readouts.
+- `Footprint` and `OccupancyGrid` provide normalized integer placement cells, atomic claims/replacements/releases, and a canonical invariant check;
+- the render snapshot can carry an optional occupied-cell region, which the browser copies into a disposable grid and translucent cell overlay without making it authoritative.
+- render snapshots also carry validated transform, visual-type, and flag regions; the browser copies those records before returning the transferable buffer to the Worker.
 
-The public entry point currently exposes lifecycle and readiness primitives only. Camera controls, grid placement, picking, entity-to-visual reconciliation, persistence, the development test bridge, and the consumer-facing scenario API are added in later milestones.
+The public entry point currently exposes lifecycle/readiness primitives, the presentation camera model, stable selection IDs, canvas picking, screen-space bounds, and synchronization waits. Placement commands, persistence, the development test bridge, and the consumer-facing scenario API are added in later milestones.
 
 ## Deliberate exclusions
 

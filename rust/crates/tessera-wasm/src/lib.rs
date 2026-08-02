@@ -5,7 +5,8 @@
 use tessera_core::{Seed, Simulation, SimulationError};
 use tessera_protocol::{
     CommandResponse, ProtocolError, RenderSnapshotDescriptor, decode_command_batch,
-    encode_command_response, encode_event_batch, encode_render_descriptor, encode_render_snapshot,
+    encode_command_response, encode_event_batch, encode_render_descriptor,
+    encode_render_snapshot_with_occupied_cells,
 };
 use wasm_bindgen::prelude::*;
 
@@ -117,8 +118,10 @@ impl TesseraWasm {
             )
         })?;
         let entities: Vec<_> = self.simulation.entities().collect();
-        self.render_snapshot_back = encode_render_snapshot(
+        let occupied_cells: Vec<_> = self.simulation.occupied_cells().collect();
+        self.render_snapshot_back = encode_render_snapshot_with_occupied_cells(
             &entities,
+            &occupied_cells,
             self.simulation.tick(),
             self.world_generation,
             self.snapshot_generation,
@@ -265,6 +268,7 @@ fn simulation_error_text(phase: &str, error: SimulationError) -> String {
         SimulationError::TickOverflow => "tick_overflow",
         SimulationError::EventSequenceOverflow => "event_sequence_overflow",
         SimulationError::BatchTooLarge => "batch_too_large",
+        SimulationError::InvariantViolation => "invariant_violation",
     };
     adapter_error_text(
         phase,
@@ -313,9 +317,9 @@ mod tests {
         assert_eq!(
             &response[28..60],
             [
-                0x24, 0xeb, 0xdf, 0xb8, 0xbf, 0x10, 0x25, 0x1c, 0x18, 0x4a, 0x2b, 0xcd, 0x57, 0xd4,
-                0x8a, 0x6b, 0x7d, 0x77, 0xbe, 0x51, 0x11, 0x4f, 0xbc, 0xf7, 0x58, 0x47, 0xf7, 0x7f,
-                0x32, 0xad, 0xb1, 0x04,
+                0x1d, 0x58, 0xe8, 0xe0, 0xcf, 0x93, 0x7e, 0x92, 0x27, 0x9a, 0x52, 0x06, 0xca, 0x3d,
+                0x4e, 0x8d, 0x24, 0xb0, 0x46, 0xb9, 0x54, 0x55, 0x68, 0x69, 0x5b, 0xc2, 0x62, 0xdd,
+                0x0e, 0xd4, 0x96, 0x7c,
             ]
             .as_slice()
         );

@@ -36,4 +36,25 @@ describe('packed data-plane validation', () => {
     view.setUint32(84, 4, true);
     expect(() => decodeRenderSnapshot(bytes)).toThrow(/overlaps the descriptor table/u);
   });
+
+  it('rejects duplicate render region kinds before a decoder chooses one', () => {
+    const bytes = new Uint8Array(64 + 64);
+    bytes.set([84, 83, 82, 78, 68, 48, 48, 49]);
+    const view = new DataView(bytes.buffer);
+    view.setUint16(8, 1, true);
+    view.setUint16(10, 64, true);
+    view.setUint32(16, bytes.byteLength, true);
+    view.setUint32(40, 0, true);
+    view.setUint32(44, 0, true);
+    view.setUint16(52, 2, true);
+    view.setUint16(54, 32, true);
+    view.setUint32(56, 64, true);
+    for (const offset of [64, 96]) {
+      view.setUint16(offset, 1, true);
+      view.setUint8(offset + 2, 3);
+      view.setUint8(offset + 3, 1);
+      view.setUint32(offset + 8, 128, true);
+    }
+    expect(() => decodeRenderSnapshot(bytes)).toThrow(/region kind 1 is duplicated/u);
+  });
 });

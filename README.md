@@ -41,14 +41,15 @@ flowchart LR
 
 ## Foundation status
 
-| Area                     | What is working today                                                                               |
-| ------------------------ | --------------------------------------------------------------------------------------------------- |
-| **Deterministic kernel** | Fixed-tick Rust simulation, seeded randomness, generational IDs, replay, and canonical state hashes |
-| **Worker boundary**      | Versioned command, event, and render messages with packed validation                                |
-| **Wasm transport**       | `wasm-pack --target web`, transferable render buffers, and recovery after Wasm memory growth        |
-| **Browser shell**        | Babylon.js lifecycle, readiness, diagnostics, and deterministic shutdown                            |
+| Area                     | What is working today                                                                                       |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| **Deterministic kernel** | Fixed-tick Rust simulation, seeded randomness, generational IDs, replay, and canonical state hashes         |
+| **Worker boundary**      | Versioned command, event, and render messages with packed validation                                        |
+| **Wasm transport**       | `wasm-pack --target web`, transferable render buffers, and recovery after Wasm memory growth                |
+| **Browser shell**        | Babylon.js lifecycle, readiness, diagnostics, orthographic camera, occupancy overlay, picking, and shutdown |
+| **Selection**            | Stable `slot:generation` IDs, canvas picking, screen-space bounds, and stale-generation checks              |
 
-The next milestone is the isometric camera and canonical coordinate conversion. Placement, picking, persistence, the consumer-facing runtime API, and the full Scenario Lab remain in development.
+The authoritative grid, occupancy model, and first selection path are now in place. Placement, persistence, the consumer-facing scenario API, and the full Scenario Lab remain in development.
 
 ## Running in the browser
 

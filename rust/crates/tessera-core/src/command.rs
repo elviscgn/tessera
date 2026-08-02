@@ -91,6 +91,10 @@ pub enum RejectionReason {
     UnknownEntity = 5,
     /// An entity generation could not advance safely.
     GenerationExhausted = 6,
+    /// The command would claim a cell already occupied by another entity.
+    OccupiedCell = 7,
+    /// The configured footprint could not be expanded at the requested anchor.
+    InvalidFootprint = 8,
 }
 
 impl RejectionReason {

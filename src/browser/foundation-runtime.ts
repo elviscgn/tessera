@@ -1,7 +1,11 @@
 import { BabylonRenderer, type RendererDiagnostics } from '../renderer/babylon-renderer';
 import {
+  decodeOccupiedCells,
   decodeEventBatch,
+  decodeRenderEntities,
   decodeRenderSnapshot,
+  type RenderEntityRecord,
+  type RenderGridCell,
   type RenderSnapshotMetadata,
 } from '../worker/data-protocol';
 import {
@@ -11,6 +15,8 @@ import {
   type WorkerResponse,
 } from '../worker/bridge-protocol';
 import { ReliableEventReceiver, type EventStreamMetrics } from '../worker/reliable-events';
+import { CameraProjection, type CameraProjectionOptions } from '../renderer/isometric-camera';
+import { type EntityId, type ScreenBounds, type ScreenPoint } from '../renderer/entity-selection';
 
 export type FoundationState = 'starting' | 'ready' | 'fatal' | 'disposed';
 
@@ -31,6 +37,7 @@ export interface FoundationDiagnostics {
   readonly metrics?: BoundaryMetrics;
   readonly eventStream: EventStreamMetrics;
   readonly renderer: RendererDiagnostics;
+  readonly selectedEntityId?: EntityId;
   readonly lastError?: FoundationError;
 }
 
@@ -43,7 +50,15 @@ export interface FoundationReady {
 
 export interface FoundationRenderer {
   start(): void;
-  consumeSnapshot(snapshot: RenderSnapshotMetadata): void;
+  consumeSnapshot(
+    snapshot: RenderSnapshotMetadata,
+    occupiedCells?: readonly RenderGridCell[],
+    entities?: readonly RenderEntityRecord[],
+  ): void;
+  pick?(point: ScreenPoint): EntityId | undefined;
+  selectedEntity?(): EntityId | undefined;
+  subscribeSelection?(listener: (entityId: EntityId | undefined) => void): () => void;
+  screenBounds?(entityId: EntityId): ScreenBounds | undefined;
   diagnostics(): RendererDiagnostics;
   dispose(): void;
 }
@@ -63,8 +78,12 @@ export interface FoundationWorker {
 export interface FoundationRuntimeOptions {
   readonly canvas: HTMLCanvasElement;
   readonly seed?: Uint8Array;
+  readonly camera?: CameraProjectionOptions;
   readonly workerFactory?: () => FoundationWorker;
-  readonly rendererFactory?: (canvas: HTMLCanvasElement) => FoundationRenderer;
+  readonly rendererFactory?: (
+    canvas: HTMLCanvasElement,
+    camera: CameraProjection,
+  ) => FoundationRenderer;
 }
 
 type CommandPending = {
@@ -77,6 +96,14 @@ type MetricsPending = {
   readonly reject: (error: Error) => void;
 };
 
+type WaitKind = 'simulationTick' | 'renderTick' | 'renderGeneration';
+
+type Waiter = {
+  readonly target: bigint;
+  readonly resolve: (diagnostics: FoundationDiagnostics) => void;
+  readonly reject: (error: Error) => void;
+};
+
 const defaultSeed = (): Uint8Array => new Uint8Array(32).fill(7);
 
 const defaultWorkerFactory = (): FoundationWorker =>
@@ -85,21 +112,50 @@ const defaultWorkerFactory = (): FoundationWorker =>
     type: 'module',
   });
 
-const defaultRendererFactory = (canvas: HTMLCanvasElement): FoundationRenderer =>
-  new BabylonRenderer(canvas);
+const defaultRendererFactory = (
+  canvas: HTMLCanvasElement,
+  camera: CameraProjection,
+): FoundationRenderer => {
+  const renderer = new BabylonRenderer(canvas, camera);
+  return {
+    start: () => renderer.start(),
+    consumeSnapshot: (snapshot, occupiedCells, entities) =>
+      renderer.consumeSnapshot(snapshot, occupiedCells, entities),
+    pick: (point) => renderer.pick(point),
+    selectedEntity: () => renderer.selectedEntity(),
+    subscribeSelection: (listener) => renderer.subscribeSelection(listener),
+    screenBounds: (entityId) => renderer.screenBounds(entityId),
+    diagnostics: () => renderer.diagnostics(),
+    dispose: () => renderer.dispose(),
+  };
+};
 
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
 
+const normalizeWaitTarget = (value: number | bigint, label: string): bigint => {
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new Error(`tessera:wait:invalid_target:${label} must be a non-negative safe integer`);
+    }
+    return BigInt(value);
+  }
+  if (value < 0n) {
+    throw new Error(`tessera:wait:invalid_target:${label} must be non-negative`);
+  }
+  return value;
+};
+
 /**
- * Lifecycle owner for the Milestone 3 foundation.
+ * Lifecycle owner for the browser runtime.
  *
  * The runtime owns one Worker, one Babylon renderer, all listeners, pending
- * requests, and the readiness state. It deliberately does not expose a
- * mutable simulation world or reconcile entity visuals yet.
+ * requests, readiness, selection, and synchronization waits. It deliberately
+ * does not expose a mutable simulation world.
  */
 export class FoundationRuntime {
   public readonly ready: Promise<FoundationReady>;
+  public readonly camera: CameraProjection;
 
   private readonly worker: FoundationWorker;
   private readonly renderer: FoundationRenderer;
@@ -121,6 +177,14 @@ export class FoundationRuntime {
   private latestMetrics: BoundaryMetrics | undefined;
   private lastError: FoundationError | undefined;
   private workerTerminated = false;
+  private selectedEntityId: EntityId | undefined;
+  private readonly selectionListeners = new Set<(entityId: EntityId | undefined) => void>();
+  private readonly waiters: Record<WaitKind, Waiter[]> = {
+    simulationTick: [],
+    renderTick: [],
+    renderGeneration: [],
+  };
+  private readonly noErrorWaiters = new Set<Waiter>();
 
   private readonly onMessage = (event: MessageEvent<WorkerResponse>): void => {
     this.handleMessage(event.data);
@@ -140,7 +204,11 @@ export class FoundationRuntime {
       this.rejectReady = reject;
     });
 
-    this.renderer = (options.rendererFactory ?? defaultRendererFactory)(options.canvas);
+    this.camera = new CameraProjection(options.camera);
+    this.renderer = (options.rendererFactory ?? defaultRendererFactory)(
+      options.canvas,
+      this.camera,
+    );
     try {
       this.renderer.start();
       this.worker = (options.workerFactory ?? defaultWorkerFactory)();
@@ -157,6 +225,34 @@ export class FoundationRuntime {
     return this.currentState;
   }
 
+  public waitForReady(): Promise<FoundationReady> {
+    return this.ready;
+  }
+
+  public waitForSimulationTick(target: number | bigint): Promise<FoundationDiagnostics> {
+    return this.waitFor('simulationTick', normalizeWaitTarget(target, 'simulation tick'));
+  }
+
+  public waitForRenderedTick(target: number | bigint): Promise<FoundationDiagnostics> {
+    return this.waitFor('renderTick', normalizeWaitTarget(target, 'rendered tick'));
+  }
+
+  public waitForRenderGeneration(target: number | bigint): Promise<FoundationDiagnostics> {
+    return this.waitFor('renderGeneration', normalizeWaitTarget(target, 'render generation'));
+  }
+
+  public waitForNoPendingErrors(): Promise<FoundationDiagnostics> {
+    if (this.currentState === 'ready' && this.lastError === undefined) {
+      return Promise.resolve(this.diagnostics());
+    }
+    if (this.currentState === 'fatal' || this.currentState === 'disposed') {
+      return Promise.reject(this.lifecycleError());
+    }
+    return new Promise<FoundationDiagnostics>((resolve, reject) => {
+      this.noErrorWaiters.add({ target: 0n, resolve, reject });
+    });
+  }
+
   public diagnostics(): FoundationDiagnostics {
     const baseDiagnostics = {
       state: this.currentState,
@@ -167,6 +263,7 @@ export class FoundationRuntime {
       lastEntityCount: this.lastEntityCount,
       eventStream: this.eventReceiver.metrics(),
       renderer: this.renderer.diagnostics(),
+      ...(this.selectedEntityId === undefined ? {} : { selectedEntityId: this.selectedEntityId }),
     };
     return {
       ...baseDiagnostics,
@@ -182,6 +279,31 @@ export class FoundationRuntime {
     return () => {
       this.diagnosticListeners.delete(listener);
     };
+  }
+
+  public pick(point: ScreenPoint): EntityId | undefined {
+    if (this.currentState === 'disposed' || this.currentState === 'fatal') {
+      return undefined;
+    }
+    const entityId = this.renderer.pick?.(point);
+    this.setSelectedEntity(entityId);
+    return entityId;
+  }
+
+  public selectedEntity(): EntityId | undefined {
+    return this.selectedEntityId;
+  }
+
+  public subscribeSelection(listener: (entityId: EntityId | undefined) => void): () => void {
+    this.selectionListeners.add(listener);
+    listener(this.selectedEntityId);
+    return () => {
+      this.selectionListeners.delete(listener);
+    };
+  }
+
+  public screenBounds(entityId: EntityId): ScreenBounds | undefined {
+    return this.renderer.screenBounds?.(entityId);
   }
 
   public submitCommand(
@@ -231,6 +353,7 @@ export class FoundationRuntime {
     const wasFatal = this.currentState === 'fatal';
     this.currentState = 'disposed';
     this.rejectPending(disposeError);
+    this.rejectWaiters(disposeError);
     if (!wasFatal) {
       try {
         this.worker.postMessage({ type: 'dispose' });
@@ -274,6 +397,7 @@ export class FoundationRuntime {
       this.simulationTick = BigInt(response.tick);
       this.lastStateHashHex = response.stateHashHex;
       this.latestMetrics = response.metrics;
+      this.lastError = undefined;
       this.pendingCommands.get(response.requestId)?.resolve(response);
       this.pendingCommands.delete(response.requestId);
       this.notifyDiagnostics();
@@ -339,7 +463,11 @@ export class FoundationRuntime {
       ) {
         throw new Error('render response metadata does not match its packed snapshot');
       }
-      this.renderer.consumeSnapshot(snapshot);
+      this.renderer.consumeSnapshot(
+        snapshot,
+        decodeOccupiedCells(new Uint8Array(response.buffer, 0, response.byteLength), snapshot),
+        decodeRenderEntities(new Uint8Array(response.buffer, 0, response.byteLength), snapshot),
+      );
       this.lastSnapshotGeneration = snapshot.snapshotGeneration;
       this.lastRenderTick = snapshot.simulationTick;
       this.lastEntityCount = snapshot.entityCount;
@@ -395,6 +523,7 @@ export class FoundationRuntime {
     this.currentState = 'fatal';
     this.lastError = { code, message, phase };
     this.rejectPending(error);
+    this.rejectWaiters(error);
     this.detachWorker();
     this.terminateWorker();
     this.renderer.dispose();
@@ -437,10 +566,77 @@ export class FoundationRuntime {
 
   private notifyDiagnostics(): void {
     const diagnostics = this.diagnostics();
+    this.resolveWaiters(diagnostics);
     for (const listener of this.diagnosticListeners) {
       listener(diagnostics);
     }
   }
+
+  private readonly waitFor = (kind: WaitKind, target: bigint): Promise<FoundationDiagnostics> => {
+    if (this.currentState === 'fatal' || this.currentState === 'disposed') {
+      return Promise.reject(this.lifecycleError());
+    }
+    if (this.currentState === 'ready' && this.waitValue(kind) >= target) {
+      return Promise.resolve(this.diagnostics());
+    }
+    return new Promise<FoundationDiagnostics>((resolve, reject) => {
+      this.waiters[kind].push({ target, resolve, reject });
+    });
+  };
+
+  private readonly waitValue = (kind: WaitKind): bigint => {
+    if (kind === 'simulationTick') {
+      return this.simulationTick;
+    }
+    if (kind === 'renderTick') {
+      return this.lastRenderTick;
+    }
+    return this.lastSnapshotGeneration;
+  };
+
+  private readonly resolveWaiters = (diagnostics: FoundationDiagnostics): void => {
+    for (const kind of Object.keys(this.waiters) as WaitKind[]) {
+      const pending = this.waiters[kind];
+      const ready = pending.filter((waiter) => this.waitValue(kind) >= waiter.target);
+      this.waiters[kind] = pending.filter((waiter) => this.waitValue(kind) < waiter.target);
+      for (const waiter of ready) {
+        waiter.resolve(diagnostics);
+      }
+    }
+    if (this.currentState === 'ready' && this.lastError === undefined) {
+      for (const waiter of this.noErrorWaiters) {
+        waiter.resolve(diagnostics);
+      }
+      this.noErrorWaiters.clear();
+    }
+  };
+
+  private readonly rejectWaiters = (error: Error): void => {
+    for (const kind of Object.keys(this.waiters) as WaitKind[]) {
+      for (const waiter of this.waiters[kind]) {
+        waiter.reject(error);
+      }
+      this.waiters[kind] = [];
+    }
+    for (const waiter of this.noErrorWaiters) {
+      waiter.reject(error);
+    }
+    this.noErrorWaiters.clear();
+  };
+
+  private readonly lifecycleError = (): Error =>
+    new Error(`tessera:wait:lifecycle:runtime is ${this.currentState}`);
+
+  private readonly setSelectedEntity = (entityId: EntityId | undefined): void => {
+    if (this.selectedEntityId === entityId) {
+      return;
+    }
+    this.selectedEntityId = entityId;
+    for (const listener of this.selectionListeners) {
+      listener(entityId);
+    }
+    this.notifyDiagnostics();
+  };
 }
 
 export const createFoundationRuntime = (options: FoundationRuntimeOptions): FoundationRuntime =>
