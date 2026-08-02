@@ -8,6 +8,7 @@ mod grid;
 mod id;
 mod occupancy;
 mod rng;
+mod save;
 mod simulation;
 
 pub use command::{
@@ -21,6 +22,7 @@ pub use occupancy::{
     MAX_FOOTPRINT_CELLS, OccupancyError, OccupancyGrid,
 };
 pub use rng::{RNG_ALGORITHM_VERSION, Seed};
+pub use save::{LoadedSave, MAX_SAVE_BYTES, SAVE_FORMAT, SAVE_SCHEMA_VERSION, SaveError};
 pub use simulation::{
     DEFAULT_TICK_RATE_HZ, ReplayError, STATE_HASH_VERSION, Simulation, SimulationConfig,
     SimulationError, StateHash,

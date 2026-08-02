@@ -57,6 +57,28 @@ export class TesseraWasm {
         return BigInt.asUintN(64, ret);
     }
     /**
+     * Validates a save into temporary state and swaps it atomically on success.
+     * @param {Uint8Array} bytes
+     * @param {string} game_id
+     * @param {string} scenario_id
+     * @param {string} framework_version
+     * @param {number} protocol_version
+     */
+    load_state(bytes, game_id, scenario_id, framework_version, protocol_version) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(game_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(scenario_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(framework_version, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ret = wasm.tesserawasm_load_state(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, protocol_version);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
      * Initializes one simulation from an exactly 32-byte seed.
      * @param {Uint8Array} seed
      */
@@ -70,6 +92,14 @@ export class TesseraWasm {
         this.__wbg_ptr = ret[0];
         TesseraWasmFinalization.register(this, this.__wbg_ptr, this);
         return this;
+    }
+    /**
+     * Returns the next client sequence that will not be rejected as stale.
+     * @returns {bigint}
+     */
+    next_client_sequence() {
+        const ret = wasm.tesserawasm_next_client_sequence(this.__wbg_ptr);
+        return BigInt.asUintN(64, ret);
     }
     /**
      * Registers one declarative object type before the first command is run.
@@ -110,6 +140,39 @@ export class TesseraWasm {
         return readU8Result(ret);
     }
     /**
+     * Serializes the current authoritative state without mutating it.
+     * @param {string} game_id
+     * @param {string} scenario_id
+     * @param {string} framework_version
+     * @param {number} protocol_version
+     * @returns {Uint8Array}
+     */
+    save_state(game_id, scenario_id, framework_version, protocol_version) {
+        const ptr0 = passStringToWasm0(game_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(scenario_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(framework_version, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.tesserawasm_save_state(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, protocol_version);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v4;
+    }
+    /**
+     * Returns the current canonical state hash for a load response.
+     * @returns {Uint8Array}
+     */
+    state_hash() {
+        const ret = wasm.tesserawasm_state_hash(this.__wbg_ptr);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
      * Returns the current authoritative tick.
      * @returns {bigint}
      */
@@ -129,6 +192,14 @@ export class TesseraWasm {
     validate_placement(object_type, x, z, elevation_mm, rotation) {
         const ret = wasm.tesserawasm_validate_placement(this.__wbg_ptr, object_type, x, z, elevation_mm, rotation);
         return readU8Result(ret);
+    }
+    /**
+     * Returns the current reset/world generation.
+     * @returns {number}
+     */
+    world_generation() {
+        const ret = wasm.tesserawasm_world_generation(this.__wbg_ptr);
+        return ret >>> 0;
     }
 }
 if (Symbol.dispose) TesseraWasm.prototype[Symbol.dispose] = TesseraWasm.prototype.free;

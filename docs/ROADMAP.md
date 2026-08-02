@@ -14,10 +14,11 @@ Tessera is delivered in small checkpoints so each release keeps a clear, reviewa
 - **Milestone 6 — picking and selection:** packed entity transforms, stable slot/generation IDs, canvas picking, screen-space bounds, stale-generation protection, and deterministic readiness/tick/render waits.
 - **Milestone 7 — placement:** Rust-owned declarative object handles, non-mutating placement queries, presentation-only previews, authoritative placement/move/removal commands, and registry-aware replay fixtures.
 - **Milestone 8 — scalable visuals:** visual-type groups backed by ordinary Babylon instances, snapshot removals, world-generation resets, and stale-map diagnostics.
+- **Milestone 9 — persistence and replay:** versioned Rust-owned saves, checksum and identity validation, atomic loads, browser persistence adapters, golden fixtures, and native/Wasm replay parity.
 
 ## Next
 
-**Milestone 9 — persistence and replay** is the next implementation checkpoint. It will add versioned saves, validation, atomic load, migrations, and browser/native parity fixtures.
+**Milestone 10 — diagnostics and reproduction** is the next implementation checkpoint. It will add the development test bridge, annotated overlays, structured diagnostics, and reproducible bundles.
 
 ## Planned checkpoints
 

@@ -41,17 +41,35 @@ flowchart LR
 
 ## Foundation status
 
-| Area                     | What is working today                                                                                       |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| **Deterministic kernel** | Fixed-tick Rust simulation, seeded randomness, generational IDs, replay, and canonical state hashes         |
-| **Worker boundary**      | Versioned command, event, and render messages with packed validation                                        |
-| **Wasm transport**       | `wasm-pack --target web`, transferable render buffers, and recovery after Wasm memory growth                |
-| **Browser shell**        | Babylon.js lifecycle, readiness, diagnostics, orthographic camera, occupancy overlay, picking, and shutdown |
-| **Selection**            | Stable `slot:generation` IDs, canvas picking, screen-space bounds, and stale-generation checks              |
-| **Placement**            | Rust-owned object registries, non-mutating placement queries, preview state, placement, move, and removal   |
-| **Scalable visuals**     | Visual-type groups, ordinary Babylon instances, snapshot removals, reset generations, and stale-map metrics |
+| Area                     | What is working today                                                                                                |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| **Deterministic kernel** | Fixed-tick Rust simulation, seeded randomness, generational IDs, replay, and canonical state hashes                  |
+| **Worker boundary**      | Versioned command, event, and render messages with packed validation                                                 |
+| **Wasm transport**       | `wasm-pack --target web`, transferable render buffers, and recovery after Wasm memory growth                         |
+| **Browser shell**        | Babylon.js lifecycle, readiness, diagnostics, orthographic camera, occupancy overlay, picking, and shutdown          |
+| **Selection**            | Stable `slot:generation` IDs, canvas picking, screen-space bounds, and stale-generation checks                       |
+| **Placement**            | Rust-owned object registries, non-mutating placement queries, preview state, placement, move, and removal            |
+| **Scalable visuals**     | Visual-type groups, ordinary Babylon instances, snapshot removals, reset generations, and stale-map metrics          |
+| **Persistence**          | Rust-owned versioned JSON saves, checksums, identity validation, atomic loads, replay metadata, and browser adapters |
 
-The authoritative grid, occupancy model, selection path, declarative placement flow, and grouped renderer projection are now in place. Persistence, the wider consumer-facing scenario API, and the full Scenario Lab remain in development.
+The authoritative grid, occupancy model, selection path, declarative placement flow, grouped renderer projection, and v0.1 persistence boundary are now in place. The wider consumer-facing scenario API and the full Scenario Lab remain in development.
+
+## Saving and loading
+
+Save bytes are produced and validated by Rust. The browser receives them as opaque `Uint8Array` values and chooses where to keep them:
+
+```ts
+import { MemoryPersistenceAdapter } from '@tessera/runtime';
+
+const adapter = new MemoryPersistenceAdapter();
+const bytes = await runtime.save();
+await adapter.write(bytes);
+
+const restored = await runtime.load(bytes);
+console.log(restored.tick, restored.stateHashHex);
+```
+
+`MemoryPersistenceAdapter`, `createIndexedDbPersistenceAdapter`, `importSaveFile`, and `exportSaveFile` are convenience adapters at the public package entry point. A failed load is rejected before the active world is replaced.
 
 ## Running in the browser
 

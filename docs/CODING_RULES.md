@@ -17,6 +17,8 @@ These rules keep the simulation deterministic, the browser boundary understandab
 - Keep JSON out of the per-frame render path.
 - Treat protocol bytes, save data, asset metadata, and imported scenarios as untrusted input.
 - Use versioned formats and fail closed on unknown required fields or malformed lengths.
+- Keep the save DTO Rust-owned. TypeScript may store, copy, import, and export save bytes, but it must not parse or rewrite authoritative state.
+- Load into temporary Rust state, validate identity, checksum, and invariants, and swap only after validation succeeds. A failed load must preserve the active world.
 
 ## TypeScript and Rust
 
@@ -41,4 +43,4 @@ These rules keep the simulation deterministic, the browser boundary understandab
 
 Keep a change limited to one coherent milestone or maintenance task. Do not mix unrelated cleanup into feature work. Review generated Wasm and lockfile changes deliberately.
 
-The current implementation scope includes the Babylon lifecycle, the Worker readiness bridge, the orthographic camera model, named camera actions, coordinate conversion, authoritative grid occupancy, declarative object registration, Rust-backed placement queries and commands, the debug-grid projection, slot/generation selection, deterministic waits, diagnostics, and their tests. React, persistence, gameplay systems, and the test bridge belong to later milestones.
+The current implementation scope includes the Babylon lifecycle, the Worker readiness bridge, the orthographic camera model, named camera actions, coordinate conversion, authoritative grid occupancy, declarative object registration, Rust-backed placement queries and commands, the debug-grid projection, slot/generation selection, deterministic waits, diagnostics, Rust-owned save/load and replay metadata, browser persistence adapters, and their tests. React, gameplay systems, and the test bridge belong to later milestones.

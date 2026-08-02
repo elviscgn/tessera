@@ -85,6 +85,16 @@ Wasm memory growth invalidates existing JavaScript views. The Worker compares th
 
 The initial render pool has three reusable buffers with power-of-two capacities. The main thread returns a buffer after it is no longer in use. If all buffers are in flight, the Worker records backpressure and skips visual publication while simulation continues.
 
+## Persistence and replay
+
+The save boundary is deliberately separate from the per-frame protocol. Rust serializes a versioned, compact UTF-8 JSON DTO containing the seed, registry metadata, arena slots, occupancy index, pending commands, event log, replay records, and the current tick. A checksum is BLAKE3 over the same DTO with its checksum field empty; it is not a hash of Rust memory layout or formatted JSON from another implementation.
+
+The Worker checks framework, protocol, game, and scenario identity before asking Rust to validate a save. Rust validates the schema, seed, registry ordering, generational references, occupancy invariants, command/event sequences, replay ticks, and checksum into temporary state. Only after every check succeeds does the Wasm adapter swap the simulation, advance the world generation, reset event acknowledgement, and publish a fresh event stream and snapshot. A rejected import therefore leaves the active world unchanged.
+
+Schema version 1 is the only supported document today. The migration boundary is intentionally explicit: the loader returns a structured unsupported-version result, and a pure migration step will be added only when a second schema exists. Golden fixtures cover canonical bytes and native replay/hash parity; corruption, wrong identity, unsupported schema, quota, and interrupted-write cases are treated as expected failure paths.
+
+The public `PersistenceAdapter` owns storage, not interpretation. The in-memory, IndexedDB, file-import, and file-export helpers copy bytes defensively. Applications can provide another adapter without exposing browser storage to Rust.
+
 ## Renderer
 
 Babylon imports are modular, with the glTF loader registered separately. The scene is right-handed and follows glTF conventions: `+X` east, `+Y` up, `+Z` south, and one Babylon unit per metre. Asset pivots are bottom-centred. Camera and footprint rotations are four clockwise quarter-turns.
@@ -105,7 +115,7 @@ The camera is a right-handed orthographic projection aligned with glTF. `+X` is 
 
 ## Current implementation
 
-Milestones 3 through 8 provide the lifecycle, camera, occupancy, selection, placement, and scalable-renderer foundation:
+Milestones 3 through 9 provide the lifecycle, camera, occupancy, selection, placement, scalable-renderer, and persistence foundation:
 
 - `FoundationRuntime` owns one Worker, one renderer, listeners, pending requests, readiness, diagnostics, selection subscriptions, deterministic waits, and disposal;
 - `BabylonRenderer` creates a WebGL2 engine, right-handed scene, camera, light, the foundation overlays, and slot/generation-keyed entity visuals;
@@ -120,7 +130,7 @@ Milestones 3 through 8 provide the lifecycle, camera, occupancy, selection, plac
 - entity snapshots reconcile by slot, generation, and visual type; ordinary instances are grouped under disposable visual templates and removed when absent from the newest snapshot;
 - world-generation resets clear the renderer projection atomically, while stale world/snapshot generations and stale slot mappings are visible in renderer diagnostics.
 
-The public entry point currently exposes lifecycle/readiness primitives, the presentation camera model, stable selection IDs, canvas picking, screen-space bounds, declarative object definitions, Rust-backed placement queries, placement/move/remove commands, and synchronization waits. Persistence, the development test bridge, and the wider consumer-facing scenario API are added in later milestones.
+The public entry point currently exposes lifecycle/readiness primitives, the presentation camera model, stable selection IDs, canvas picking, screen-space bounds, declarative object definitions, Rust-backed placement queries and commands, persistence adapters, save/load methods, and synchronization waits. The development test bridge and wider consumer-facing scenario API are added in later milestones.
 
 ## Placement flow
 

@@ -7,6 +7,9 @@
  */
 
 export const PROTOCOL_VERSION = 1;
+export const SAVE_GAME_ID = 'tessera';
+export const SAVE_FRAMEWORK_VERSION = '0.0.0';
+export const DEFAULT_SCENARIO_ID = 'default';
 const COMMAND_HEADER_LENGTH = 28;
 const RECORD_HEADER_LENGTH = 8;
 export const RESPONSE_LENGTH = 64;
@@ -121,6 +124,17 @@ export interface MetricsRequest {
   readonly requestId: number;
 }
 
+export interface SaveRequest {
+  readonly type: 'save';
+  readonly requestId: number;
+}
+
+export interface LoadRequest {
+  readonly type: 'load';
+  readonly requestId: number;
+  readonly bytes: ArrayBuffer;
+}
+
 export interface DisposeRequest {
   readonly type: 'dispose';
 }
@@ -133,6 +147,8 @@ export type WorkerRequest =
   | RequestEventsRequest
   | ReturnRenderBufferRequest
   | MetricsRequest
+  | SaveRequest
+  | LoadRequest
   | DisposeRequest;
 
 export interface BoundaryMetrics {
@@ -152,6 +168,10 @@ export interface BoundaryMetrics {
   readonly memoryGeneration: number;
   readonly memoryBufferBytes: number;
   readonly viewRecreations: number;
+  readonly saveCalls: number;
+  readonly saveBytes: number;
+  readonly loadCalls: number;
+  readonly loadBytes: number;
 }
 
 export interface StartupReadyResponse {
@@ -209,6 +229,26 @@ export interface MetricsResponse {
   readonly metrics: BoundaryMetrics;
 }
 
+export interface SaveResultResponse {
+  readonly type: 'save-result';
+  readonly requestId: number;
+  readonly tick: number;
+  readonly stateHashHex: string;
+  readonly byteLength: number;
+  readonly bytes: ArrayBuffer;
+  readonly metrics: BoundaryMetrics;
+}
+
+export interface LoadResultResponse {
+  readonly type: 'load-result';
+  readonly requestId: number;
+  readonly tick: number;
+  readonly stateHashHex: string;
+  readonly worldGeneration: number;
+  readonly nextClientSequence: bigint;
+  readonly metrics: BoundaryMetrics;
+}
+
 export interface WorkerErrorResponse {
   readonly type: 'command-error' | 'fatal-error';
   readonly phase: 'startup' | 'command' | 'fatal';
@@ -225,6 +265,8 @@ export type WorkerResponse =
   | EventBatchResponse
   | RenderSnapshotResponse
   | MetricsResponse
+  | SaveResultResponse
+  | LoadResultResponse
   | WorkerErrorResponse;
 
 export const encodeSpawnCommandBatch = (input: SpawnCommandInput): ArrayBuffer => {
@@ -411,7 +453,10 @@ export const parseWasmError = (error: unknown): WorkerErrorResponse => {
   const phase =
     match[1] === 'startup'
       ? 'startup'
-      : match[1] === 'command' || match[1] === 'placement'
+      : match[1] === 'command' ||
+          match[1] === 'placement' ||
+          match[1] === 'save' ||
+          match[1] === 'load'
         ? 'command'
         : 'fatal';
   return {

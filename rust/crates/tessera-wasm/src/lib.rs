@@ -4,7 +4,7 @@
 
 use tessera_core::{
     Footprint, FootprintError, FootprintOffset, GridConfigurationError, GridPosition, QuarterTurn,
-    Seed, Simulation, SimulationError,
+    SaveError, Seed, Simulation, SimulationError,
 };
 use tessera_protocol::{
     CommandResponse, PlacementValidationResponse, ProtocolError, RenderSnapshotDescriptor,
@@ -83,6 +83,52 @@ impl TesseraWasm {
             .map_err(|message| JsValue::from_str(&message))
     }
 
+    /// Serializes the current authoritative state without mutating it.
+    pub fn save_state(
+        &self,
+        game_id: &str,
+        scenario_id: &str,
+        framework_version: &str,
+        protocol_version: u16,
+    ) -> Result<Vec<u8>, JsValue> {
+        self.save_state_inner(game_id, scenario_id, framework_version, protocol_version)
+            .map_err(|message| JsValue::from_str(&message))
+    }
+
+    /// Validates a save into temporary state and swaps it atomically on success.
+    pub fn load_state(
+        &mut self,
+        bytes: &[u8],
+        game_id: &str,
+        scenario_id: &str,
+        framework_version: &str,
+        protocol_version: u16,
+    ) -> Result<(), JsValue> {
+        self.load_state_inner(
+            bytes,
+            game_id,
+            scenario_id,
+            framework_version,
+            protocol_version,
+        )
+        .map_err(|message| JsValue::from_str(&message))
+    }
+
+    /// Returns the current canonical state hash for a load response.
+    pub fn state_hash(&self) -> Vec<u8> {
+        self.simulation.state_hash().to_vec()
+    }
+
+    /// Returns the current reset/world generation.
+    pub fn world_generation(&self) -> u32 {
+        self.world_generation
+    }
+
+    /// Returns the next client sequence that will not be rejected as stale.
+    pub fn next_client_sequence(&self) -> u64 {
+        self.simulation.next_client_sequence().unwrap_or(0)
+    }
+
     /// Returns the adapter contract version used by the Worker readiness message.
     pub fn adapter_version(&self) -> u16 {
         WASM_ADAPTER_VERSION
@@ -128,6 +174,65 @@ impl TesseraWasm {
 }
 
 impl TesseraWasm {
+    fn save_state_inner(
+        &self,
+        game_id: &str,
+        scenario_id: &str,
+        framework_version: &str,
+        protocol_version: u16,
+    ) -> Result<Vec<u8>, String> {
+        if self.disposed {
+            return Err(adapter_error_text(
+                "save",
+                "disposed",
+                "the Wasm simulation has been disposed",
+            ));
+        }
+        self.simulation
+            .save_json(
+                game_id,
+                scenario_id,
+                framework_version,
+                protocol_version,
+                self.world_generation,
+            )
+            .map_err(|error| save_error_text("save", error))
+    }
+
+    fn load_state_inner(
+        &mut self,
+        bytes: &[u8],
+        game_id: &str,
+        scenario_id: &str,
+        framework_version: &str,
+        protocol_version: u16,
+    ) -> Result<(), String> {
+        if self.disposed {
+            return Err(adapter_error_text(
+                "load",
+                "disposed",
+                "the Wasm simulation has been disposed",
+            ));
+        }
+        let loaded = Simulation::load_json(
+            bytes,
+            game_id,
+            scenario_id,
+            framework_version,
+            protocol_version,
+        )
+        .map_err(|error| save_error_text("load", error))?;
+        let next_world_generation = self.world_generation.checked_add(1).ok_or_else(|| {
+            adapter_error_text("load", "generation_overflow", "world generation overflowed")
+        })?;
+        self.simulation = loaded.simulation;
+        self.world_generation = next_world_generation;
+        self.event_ack_sequence = 0;
+        self.render_snapshot_front.clear();
+        self.render_snapshot_back.clear();
+        Ok(())
+    }
+
     fn register_object_type_inner(
         &mut self,
         id: &str,
@@ -351,6 +456,20 @@ fn protocol_error_text(phase: &str, error: ProtocolError) -> String {
     adapter_error_text(phase, protocol_code(error.code), &error.to_string())
 }
 
+fn save_error_text(phase: &str, error: SaveError) -> String {
+    let code = match error {
+        SaveError::TooLarge => "too_large",
+        SaveError::InvalidJson => "invalid_json",
+        SaveError::InvalidFormat => "invalid_format",
+        SaveError::UnsupportedSchema(_) => "unsupported_schema",
+        SaveError::ChecksumMismatch => "checksum_mismatch",
+        SaveError::IdentityMismatch(_) => "identity_mismatch",
+        SaveError::InvalidMetadata(_) => "invalid_metadata",
+        SaveError::InvalidState(_) => "invalid_state",
+    };
+    format!("tessera:{phase}:{code}:{error}")
+}
+
 fn protocol_code(code: tessera_protocol::ProtocolErrorCode) -> &'static str {
     match code {
         tessera_protocol::ProtocolErrorCode::Truncated => "truncated",
@@ -503,5 +622,36 @@ mod tests {
         assert!(result.valid);
         assert_eq!(result.occupied_cell_count, 2);
         assert_eq!(result.object_type, 1);
+    }
+
+    #[test]
+    fn save_load_swaps_atomically_and_increments_world_generation() {
+        let mut adapter = TesseraWasm::new(&[7; 32]).unwrap();
+        adapter
+            .register_object_type_inner("foundation", &[0, 0])
+            .unwrap();
+        adapter.run_command_batch_inner(&batch(), 1).unwrap();
+        let saved_hash = adapter.simulation.state_hash();
+        let saved = adapter
+            .save_state_inner("tessera", "foundation", "0.0.0", 1)
+            .unwrap();
+
+        adapter.run_command_batch_inner(&batch(), 1).unwrap();
+        let changed_hash = adapter.simulation.state_hash();
+        assert_ne!(changed_hash, saved_hash);
+        adapter
+            .load_state_inner(&saved, "tessera", "foundation", "0.0.0", 1)
+            .unwrap();
+        assert_eq!(adapter.simulation.state_hash(), saved_hash);
+        assert_eq!(adapter.world_generation, 2);
+        assert_eq!(adapter.simulation.next_client_sequence(), Some(2));
+
+        let before_failed_load = adapter.simulation.state_hash();
+        let error = adapter
+            .load_state_inner(b"{}", "tessera", "foundation", "0.0.0", 1)
+            .expect_err("malformed load must fail");
+        assert!(error.starts_with("tessera:load:invalid_json:"));
+        assert_eq!(adapter.simulation.state_hash(), before_failed_load);
+        assert_eq!(adapter.world_generation, 2);
     }
 }

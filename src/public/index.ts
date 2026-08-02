@@ -2,9 +2,9 @@
  * Public runtime entry point.
  *
  * The package surface is deliberately small: lifecycle and readiness, the
- * presentation camera, stable selection helpers, and the explicit canvas
- * action layer. Scenario, persistence, and gameplay contracts arrive behind
- * their own reviewed milestones.
+ * presentation camera, stable selection helpers, persistence adapters, and
+ * the explicit canvas action layer. Scenario and gameplay contracts arrive
+ * behind their own reviewed milestones.
  */
 export {
   createFoundationRuntime,
@@ -20,12 +20,22 @@ export {
 
 export {
   type EntityTransformTarget,
+  type LoadResult,
   type ObjectTypeDefinition,
   type PlacementPreview,
   type PlacementTarget,
   type PlacementValidation,
+  type PersistenceAdapter,
   type ScenarioDefinition,
 } from './runtime-types';
+
+export {
+  MemoryPersistenceAdapter,
+  createIndexedDbPersistenceAdapter,
+  exportSaveFile,
+  importSaveFile,
+  type IndexedDbPersistenceOptions,
+} from '../persistence/adapters';
 
 export {
   CameraProjection,
