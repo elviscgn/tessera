@@ -15,6 +15,16 @@ export class TesseraWasm {
         wasm.__wbg_tesserawasm_free(ptr, 0);
     }
     /**
+     * Acknowledges the highest contiguous event sequence consumed by the host.
+     * @param {bigint} highest_contiguous
+     */
+    ack_events(highest_contiguous) {
+        const ret = wasm.tesserawasm_ack_events(this.__wbg_ptr, highest_contiguous);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
      * Returns the adapter contract version used by the Worker readiness message.
      * @returns {number}
      */
@@ -27,6 +37,29 @@ export class TesseraWasm {
      */
     dispose() {
         wasm.tesserawasm_dispose(this.__wbg_ptr);
+    }
+    /**
+     * Returns ordered event records after the requested sequence.
+     * @param {bigint} after_sequence
+     * @param {number} max_events
+     * @returns {Uint8Array}
+     */
+    event_batch(after_sequence, max_events) {
+        const ret = wasm.tesserawasm_event_batch(this.__wbg_ptr, after_sequence, max_events);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * Returns the highest event sequence currently retained by the simulation.
+     * @returns {bigint}
+     */
+    latest_event_sequence() {
+        const ret = wasm.tesserawasm_latest_event_sequence(this.__wbg_ptr);
+        return BigInt.asUintN(64, ret);
     }
     /**
      * Initializes one simulation from an exactly 32-byte seed.
@@ -42,6 +75,19 @@ export class TesseraWasm {
         this.__wbg_ptr = ret[0];
         TesseraWasmFinalization.register(this, this.__wbg_ptr, this);
         return this;
+    }
+    /**
+     * Builds the latest packed snapshot and returns a descriptor into Wasm memory.
+     * @returns {Uint8Array}
+     */
+    render_snapshot_descriptor() {
+        const ret = wasm.tesserawasm_render_snapshot_descriptor(this.__wbg_ptr);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
     }
     /**
      * Decodes one binary command batch, schedules it, advances bounded exact ticks, and

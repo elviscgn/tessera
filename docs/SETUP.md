@@ -1,6 +1,6 @@
 # Local setup
 
-Milestone 2A uses exact tool versions. Select Node 24.18.1 with a version manager that reads `.node-version`; do not substitute the host Node version.
+Milestone 2B uses exact tool versions. Select Node 24.18.1 with a version manager that reads `.node-version`; do not substitute the host Node version.
 
 ```sh
 node --version

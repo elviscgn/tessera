@@ -8,6 +8,10 @@ export class TesseraWasm {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Acknowledges the highest contiguous event sequence consumed by the host.
+     */
+    ack_events(highest_contiguous: bigint): void;
+    /**
      * Returns the adapter contract version used by the Worker readiness message.
      */
     adapter_version(): number;
@@ -16,9 +20,21 @@ export class TesseraWasm {
      */
     dispose(): void;
     /**
+     * Returns ordered event records after the requested sequence.
+     */
+    event_batch(after_sequence: bigint, max_events: number): Uint8Array;
+    /**
+     * Returns the highest event sequence currently retained by the simulation.
+     */
+    latest_event_sequence(): bigint;
+    /**
      * Initializes one simulation from an exactly 32-byte seed.
      */
     constructor(seed: Uint8Array);
+    /**
+     * Builds the latest packed snapshot and returns a descriptor into Wasm memory.
+     */
+    render_snapshot_descriptor(): Uint8Array;
     /**
      * Decodes one binary command batch, schedules it, advances bounded exact ticks, and
      * returns a fixed-size binary response containing the canonical state hash.
@@ -35,15 +51,19 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_tesserawasm_free: (a: number, b: number) => void;
+    readonly tesserawasm_ack_events: (a: number, b: bigint) => [number, number];
     readonly tesserawasm_adapter_version: (a: number) => number;
     readonly tesserawasm_dispose: (a: number) => void;
+    readonly tesserawasm_event_batch: (a: number, b: bigint, c: number) => [number, number, number, number];
+    readonly tesserawasm_latest_event_sequence: (a: number) => bigint;
     readonly tesserawasm_new: (a: number, b: number) => [number, number, number];
+    readonly tesserawasm_render_snapshot_descriptor: (a: number) => [number, number, number, number];
     readonly tesserawasm_run_command_batch: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly tesserawasm_tick: (a: number) => bigint;
     readonly __wbindgen_externrefs: WebAssembly.Table;
-    readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_start: () => void;
 }
 

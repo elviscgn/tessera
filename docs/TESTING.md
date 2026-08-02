@@ -41,8 +41,16 @@ pnpm check:wasm
 pnpm build
 ```
 
-The browser probe is a development-only smoke check for this checkpoint; it does not install Playwright or assert renderer behavior. Milestone 2B must add packed data fixtures, Wasm-memory growth recovery, transferable-buffer ownership and backpressure tests, and native-versus-Wasm fixture parity before renderer work starts.
+Milestone 2B adds the data-plane and ownership checks:
 
-Run the aggregate `pnpm check` from the repository root after the pinned dependencies are installed. It expands to `pnpm check:format`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm check:rust`, `pnpm check:wasm`, and `pnpm build`. The generated Wasm module is a checked-in application input; inspect its regenerated diff and the staged file list before committing. Milestones 0–2A do not install Playwright, compare visuals, test gameplay, or add a test bridge.
+- Rust protocol tests verify the fixed render header and region table, renderer-neutral SoA payloads, fixed event record sizes, all event variants, contiguous sequence metadata, and rejection of sequence gaps.
+- TypeScript data-plane validation rejects malformed magic, versions, lengths, region capacities, table overlaps, interval overlaps, unsupported scalar types, event gaps, and trailing bytes before a renderer or acknowledgement sees them.
+- The three-slot transferable pool tests power-of-two capacity reuse, in-flight ownership, safe exhaustion drops, and invalid returns. `MemoryViewTracker` tests confirm that a `WebAssembly.Memory.grow()` changes the buffer identity and increments the view generation exactly once.
+- The generated web-target Wasm parity test compares the native probe hash, decodes the packed snapshot and event batch, acknowledges the event checkpoint, grows Wasm memory, and decodes a fresh snapshot from recreated views.
+- The Scenario Lab Worker probe exposes readiness, packed event/render metadata, ACK progress, memory-generation counters, and dropped-snapshot metrics as `data-tessera-*` attributes. A browser smoke run is required before the milestone is accepted.
+
+The browser probe remains a development-only smoke check for this checkpoint; it does not install Babylon, Playwright, or a test bridge. Renderer work remains gated until the Worker boundary proves packed data, memory-growth recovery, transferable-buffer ownership, structured errors, and native-versus-Wasm state-hash parity.
+
+Run the aggregate `pnpm check` from the repository root after the pinned dependencies are installed. It expands to `pnpm check:format`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm check:rust`, `pnpm check:wasm`, and `pnpm build`. The generated Wasm module is a checked-in application input; inspect its regenerated diff and the staged file list before committing. Milestones 0–2B do not install Playwright, compare visuals, test gameplay, or add a test bridge.
 
 Later milestones add native/Wasm parity, protocol fixtures, Worker boundary tests, Playwright flows, Chromium visuals, Firefox/WebKit smoke coverage, performance harnesses, lifecycle checks, and an isolated external consumer. Those checks are intentionally outside this native checkpoint.

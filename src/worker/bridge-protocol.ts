@@ -44,17 +44,66 @@ export interface CommandRequest {
   readonly exactTicks: number;
 }
 
+export interface AckEventsRequest {
+  readonly type: 'ack-events';
+  readonly highestContiguousSequence: bigint;
+}
+
+export interface RequestEventsRequest {
+  readonly type: 'request-events';
+  readonly afterSequence: bigint;
+  readonly resync: boolean;
+}
+
+export interface ReturnRenderBufferRequest {
+  readonly type: 'return-render-buffer';
+  readonly bufferId: number;
+  readonly buffer: ArrayBuffer;
+}
+
+export interface MetricsRequest {
+  readonly type: 'metrics';
+  readonly requestId: number;
+}
+
 export interface DisposeRequest {
   readonly type: 'dispose';
 }
 
-export type WorkerRequest = InitializeRequest | CommandRequest | DisposeRequest;
+export type WorkerRequest =
+  | InitializeRequest
+  | CommandRequest
+  | AckEventsRequest
+  | RequestEventsRequest
+  | ReturnRenderBufferRequest
+  | MetricsRequest
+  | DisposeRequest;
+
+export interface BoundaryMetrics {
+  readonly commandCalls: number;
+  readonly commandBytes: number;
+  readonly eventBatches: number;
+  readonly eventBytes: number;
+  readonly highestAcknowledgedEvent: number;
+  readonly eventGapCount: number;
+  readonly eventResyncCount: number;
+  readonly renderSnapshots: number;
+  readonly renderBytes: number;
+  readonly droppedRenderSnapshots: number;
+  readonly inFlightRenderBuffers: number;
+  readonly renderBufferPoolSize: number;
+  readonly renderBufferHighWaterMark: number;
+  readonly memoryGeneration: number;
+  readonly memoryBufferBytes: number;
+  readonly viewRecreations: number;
+}
 
 export interface StartupReadyResponse {
   readonly type: 'startup-ready';
   readonly protocolVersion: number;
   readonly adapterVersion: number;
   readonly tick: number;
+  readonly metrics: BoundaryMetrics;
 }
 
 export interface CommandResultResponse {
@@ -64,6 +113,33 @@ export interface CommandResultResponse {
   readonly tick: number;
   readonly stateHashHex: string;
   readonly response: ArrayBuffer;
+  readonly metrics: BoundaryMetrics;
+}
+
+export interface EventBatchResponse {
+  readonly type: 'event-batch';
+  readonly firstSequence: bigint;
+  readonly lastSequence: bigint;
+  readonly ackFloor: bigint;
+  readonly recordCount: number;
+  readonly bytes: ArrayBuffer;
+  readonly metrics: BoundaryMetrics;
+}
+
+export interface RenderSnapshotResponse {
+  readonly type: 'render-snapshot';
+  readonly bufferId: number;
+  readonly snapshotGeneration: bigint;
+  readonly simulationTick: bigint;
+  readonly byteLength: number;
+  readonly buffer: ArrayBuffer;
+  readonly metrics: BoundaryMetrics;
+}
+
+export interface MetricsResponse {
+  readonly type: 'metrics';
+  readonly requestId: number;
+  readonly metrics: BoundaryMetrics;
 }
 
 export interface WorkerErrorResponse {
@@ -72,9 +148,16 @@ export interface WorkerErrorResponse {
   readonly code: string;
   readonly message: string;
   readonly requestId?: number;
+  readonly metrics?: BoundaryMetrics;
 }
 
-export type WorkerResponse = StartupReadyResponse | CommandResultResponse | WorkerErrorResponse;
+export type WorkerResponse =
+  | StartupReadyResponse
+  | CommandResultResponse
+  | EventBatchResponse
+  | RenderSnapshotResponse
+  | MetricsResponse
+  | WorkerErrorResponse;
 
 export const encodeSpawnCommandBatch = (input: SpawnCommandInput): ArrayBuffer => {
   assertU32(input.objectType, 'objectType');

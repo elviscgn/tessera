@@ -6,12 +6,17 @@ import {
   decodeCommandResponse,
   encodeSpawnCommandBatch,
 } from '../../src/worker/bridge-protocol';
+import {
+  decodeEventBatch,
+  decodeRenderMemoryDescriptor,
+  decodeRenderSnapshot,
+} from '../../src/worker/data-protocol';
 
 const PROBE_HASH = '24ebdfb8bf10251c184a2bcd57d48a6b7d77be51114fbcf75847f77f32adb104';
 
 describe('generated web-target Wasm adapter', () => {
   it('matches the native probe checkpoint through the binary boundary', () => {
-    initSync({
+    const wasm = initSync({
       module: readFileSync(new URL('../../src/worker/wasm/tessera_wasm_bg.wasm', import.meta.url)),
     });
     const adapter = new TesseraWasm(new Uint8Array(32).fill(7));
@@ -34,6 +39,32 @@ describe('generated web-target Wasm adapter', () => {
       );
       expect(response.tick).toBe(1n);
       expect(bytesToHex(response.stateHash)).toBe(PROBE_HASH);
+
+      const firstDescriptor = decodeRenderMemoryDescriptor(adapter.render_snapshot_descriptor());
+      const firstMemoryBuffer = wasm.memory.buffer;
+      const firstSnapshot = decodeRenderSnapshot(
+        new Uint8Array(firstMemoryBuffer, firstDescriptor.pointer, firstDescriptor.byteLength),
+      );
+      expect(firstSnapshot.entityCount).toBe(1);
+      expect(firstSnapshot.snapshotGeneration).toBe(firstDescriptor.snapshotGeneration);
+      expect(firstSnapshot.memoryGeneration).toBe(0);
+      expect(firstSnapshot.regions).toHaveLength(9);
+
+      const eventBatch = decodeEventBatch(adapter.event_batch(0n, 1024));
+      expect(eventBatch.firstSequence).toBe(1n);
+      expect(eventBatch.lastSequence).toBe(2n);
+      expect(eventBatch.recordCount).toBe(2);
+      adapter.ack_events(eventBatch.lastSequence);
+      expect(adapter.latest_event_sequence()).toBe(eventBatch.lastSequence);
+
+      wasm.memory.grow(1);
+      expect(wasm.memory.buffer).not.toBe(firstMemoryBuffer);
+      const secondDescriptor = decodeRenderMemoryDescriptor(adapter.render_snapshot_descriptor());
+      const secondSnapshot = decodeRenderSnapshot(
+        new Uint8Array(wasm.memory.buffer, secondDescriptor.pointer, secondDescriptor.byteLength),
+      );
+      expect(secondSnapshot.snapshotGeneration).toBeGreaterThan(firstSnapshot.snapshotGeneration);
+      expect(secondSnapshot.entityCount).toBe(firstSnapshot.entityCount);
     } finally {
       adapter.free();
     }
