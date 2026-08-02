@@ -161,6 +161,8 @@ jobs:
           TESSERA_BASE_URL=http://127.0.0.1:4174 pnpm test:e2e:production
 
       - name: run Firefox and WebKit smoke
+        env:
+          HOME: /root
         run: pnpm test:e2e:compat
 
       - name: upload browser artifacts
