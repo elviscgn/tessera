@@ -1,9 +1,17 @@
 import { expect, test } from '@playwright/test';
-import { labPanel, openLab, openScenarioLab } from './helpers';
+import { labPanel, openLab } from './helpers';
 
-test('loads the Scenario Lab and can switch panels', async ({ page }) => {
-  await openScenarioLab(page);
-  await expect(page.locator('#status')).toContainText('probe-passed');
+test('loads the Scenario Lab and can switch panels', async ({ page }, testInfo) => {
+  await page.goto('/');
+  const status = page.locator('#status');
+  await expect(status).toHaveAttribute('data-tessera-status', /^(probe-passed|fatal)$/u);
+  const statusValue = await status.getAttribute('data-tessera-status');
+  if (statusValue === 'fatal') {
+    expect(testInfo.project.name).toBe('firefox');
+    await expect(status).toHaveAttribute('data-tessera-error-code', 'webgl_unavailable');
+  } else {
+    await expect(status).toContainText('probe-passed');
+  }
   await openLab(page, 'Camera');
   await expect(page.locator('#cameraRotation')).toHaveText('r0');
   await openLab(page, 'Boundary');
