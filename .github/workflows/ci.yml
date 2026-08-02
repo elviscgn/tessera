@@ -65,7 +65,7 @@ jobs:
 
       - name: verify Fallow policy
         run: |
-          test "$(pnpm exec fallow --version)" = "fallow 3.10.0"
+          test "$(pnpm exec fallow --version | sed -n '1p')" = "fallow 3.10.0"
           node scripts/check-fallow-policy.mjs
 
       - name: audit JavaScript structure

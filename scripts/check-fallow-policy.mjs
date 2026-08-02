@@ -42,6 +42,7 @@ const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
 for (const requiredWorkflowText of [
   'fetch-depth: 0',
   'node scripts/check-fallow-policy.mjs',
+  'test "$(pnpm exec fallow --version | sed -n \'1p\')" = "fallow 3.10.0"',
   'pnpm exec fallow audit --base origin/main --format github-summary --fail-on-issues --quiet',
 ]) {
   if (!workflow.includes(requiredWorkflowText)) {
