@@ -49,8 +49,9 @@ flowchart LR
 | **Browser shell**        | Babylon.js lifecycle, readiness, diagnostics, orthographic camera, occupancy overlay, picking, and shutdown |
 | **Selection**            | Stable `slot:generation` IDs, canvas picking, screen-space bounds, and stale-generation checks              |
 | **Placement**            | Rust-owned object registries, non-mutating placement queries, preview state, placement, move, and removal   |
+| **Scalable visuals**     | Visual-type groups, ordinary Babylon instances, snapshot removals, reset generations, and stale-map metrics |
 
-The authoritative grid, occupancy model, selection path, and first declarative placement flow are now in place. Persistence, the wider consumer-facing scenario API, and the full Scenario Lab remain in development.
+The authoritative grid, occupancy model, selection path, declarative placement flow, and grouped renderer projection are now in place. Persistence, the wider consumer-facing scenario API, and the full Scenario Lab remain in development.
 
 ## Running in the browser
 

@@ -27,6 +27,8 @@ These rules keep the simulation deterministic, the browser boundary understandab
 - Treat selection, camera state, screen bounds, and pointer coordinates as presentation state; they never become commands implicitly.
 - Treat placement previews as presentation state. A preview may be marked valid only from a Rust placement query, and the authoritative command must validate again.
 - Keep public object IDs stable strings. TypeScript may normalize startup declarations, but Rust assigns handles and owns footprints, occupancy, and rejection decisions.
+- Reconcile render records by slot, generation, and visual type. Use disposable ordinary instances grouped by visual type; never allocate public entity-ID strings in a per-entity snapshot update.
+- Treat world-generation changes as a renderer reset boundary. Ignore older snapshots, clear stale mappings, and expose the resulting counters through diagnostics.
 
 ## Dependencies and tests
 

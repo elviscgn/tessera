@@ -98,6 +98,7 @@ class FakeRenderer implements FoundationRenderer {
       renderFrames: this.starts,
       receivedSnapshots: this.consumed,
       lastSnapshotGeneration: this.snapshotGeneration,
+      lastWorldGeneration: 1,
       lastSimulationTick: this.simulationTick,
       lastEntityCount: this.entityCount,
       disposed: this.disposals > 0,

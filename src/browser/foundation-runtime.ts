@@ -77,7 +77,7 @@ export interface FoundationRenderer {
     snapshot: RenderSnapshotMetadata,
     occupiedCells?: readonly RenderGridCell[],
     entities?: readonly RenderEntityRecord[],
-  ): void;
+  ): boolean | void;
   pick?(point: ScreenPoint): EntityId | undefined;
   selectedEntity?(): EntityId | undefined;
   subscribeSelection?(listener: (entityId: EntityId | undefined) => void): () => void;
@@ -748,15 +748,17 @@ export class FoundationRuntime {
       ) {
         throw new Error('render response metadata does not match its packed snapshot');
       }
-      this.renderer.consumeSnapshot(
+      const applied = this.renderer.consumeSnapshot(
         snapshot,
         decodeOccupiedCells(new Uint8Array(response.buffer, 0, response.byteLength), snapshot),
         decodeRenderEntities(new Uint8Array(response.buffer, 0, response.byteLength), snapshot),
       );
-      this.lastSnapshotGeneration = snapshot.snapshotGeneration;
-      this.lastRenderTick = snapshot.simulationTick;
-      this.lastEntityCount = snapshot.entityCount;
       this.latestMetrics = response.metrics;
+      if (applied !== false) {
+        this.lastSnapshotGeneration = snapshot.snapshotGeneration;
+        this.lastRenderTick = snapshot.simulationTick;
+        this.lastEntityCount = snapshot.entityCount;
+      }
     } catch (error: unknown) {
       failure = asError(error);
     }

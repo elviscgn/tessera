@@ -91,17 +91,21 @@ Babylon imports are modular, with the glTF loader registered separately. The sce
 
 The renderer owns the engine, scene, camera, lights, materials, meshes, observers, resize listener, and render loop. It records render frames and the last validated snapshot metadata, but it does not own authoritative entities. Render records are keyed by slot and checked against generation before a pick or bounds query is accepted; a Babylon mesh is never used to infer gameplay state.
 
+Visual records are grouped by Rust-provided `visualType`. Each group owns one ordinary Babylon source mesh and creates ordinary `InstancedMesh` children for its current entities. Instances remain pickable and retain slot/generation mappings; thin instances are not used because their selection and outline behaviour is less suitable for this foundation. A visual-type change replaces the instance in the correct group, while a generation change increments the stale-mapping diagnostic before replacing the old instance.
+
+Snapshots carry a `worldGeneration` that changes on an authoritative reset/load. A newer world generation clears every instance, source template, occupied overlay, and selection before applying the new snapshot. Older world or snapshot generations are ignored and counted as stale snapshots. This makes a renderer rebuildable from the latest complete projection and prevents an old buffer from reviving a removed entity.
+
 The public selection path returns an opaque `EntityId` whose canonical representation is `slot:generation`. Babylon performs the hit test against the current visual map, while Rust remains the source of entity existence and generation. Screen-space bounds are projected from the visual's world-space corners into CSS-pixel coordinates relative to the canvas. If a slot is reused with a new generation, the old mapping is discarded and any stale selection is cleared.
 
 The runtime also exposes explicit readiness, simulation-tick, rendered-tick, render-generation, and no-pending-error waits. These waits resolve from observed Worker and renderer state rather than from arbitrary delays, so browser tests and consumer UI can synchronize without taking ownership of the clock.
 
-The project starts with ordinary Babylon instances because they support per-instance transforms and picking. Thin instances remain a measured performance experiment, not a default.
+The project starts with ordinary Babylon instances because they support per-instance transforms and picking. Selection uses the outline renderer on the selected instance, so the selection path does not mutate a shared group material. Thin instances remain a measured performance experiment, not a default.
 
 The camera is a right-handed orthographic projection aligned with glTF. `+X` is east, `+Y` is up, and `+Z` is south. The presentation camera uses a mathematically symmetric isometric pitch, four clockwise quarter-turns, a target measured in millimetres, and a zoom expressed as visible tile height. Its pure `CameraProjection` model is shared by Babylon synchronization, screen/world/grid conversion, and the coordinate laboratory. Negative world boundaries use floor division, so `-1 mm` belongs to cell `-1` for a `1,000 mm` tile. Camera state remains presentation state and cannot affect Rust hashes or commands.
 
 ## Current implementation
 
-Milestones 3 through 5 provide the lifecycle, camera, and occupancy foundation:
+Milestones 3 through 8 provide the lifecycle, camera, occupancy, selection, placement, and scalable-renderer foundation:
 
 - `FoundationRuntime` owns one Worker, one renderer, listeners, pending requests, readiness, diagnostics, selection subscriptions, deterministic waits, and disposal;
 - `BabylonRenderer` creates a WebGL2 engine, right-handed scene, camera, light, the foundation overlays, and slot/generation-keyed entity visuals;
@@ -113,6 +117,8 @@ Milestones 3 through 5 provide the lifecycle, camera, and occupancy foundation:
 - `Footprint` and `OccupancyGrid` provide normalized integer placement cells, atomic claims/replacements/releases, and a canonical invariant check;
 - the render snapshot can carry an optional occupied-cell region, which the browser copies into a disposable grid and translucent cell overlay without making it authoritative.
 - render snapshots also carry validated transform, visual-type, and flag regions; the browser copies those records before returning the transferable buffer to the Worker.
+- entity snapshots reconcile by slot, generation, and visual type; ordinary instances are grouped under disposable visual templates and removed when absent from the newest snapshot;
+- world-generation resets clear the renderer projection atomically, while stale world/snapshot generations and stale slot mappings are visible in renderer diagnostics.
 
 The public entry point currently exposes lifecycle/readiness primitives, the presentation camera model, stable selection IDs, canvas picking, screen-space bounds, declarative object definitions, Rust-backed placement queries, placement/move/remove commands, and synchronization waits. Persistence, the development test bridge, and the wider consumer-facing scenario API are added in later milestones.
 

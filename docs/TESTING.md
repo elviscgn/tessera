@@ -65,6 +65,8 @@ The probe uses structured `data-tessera-*` attributes so browser tests can asser
 
 The render probe also validates the authoritative occupied-cell region, entity transform regions, and their typed-array decoders. Unit coverage rejects malformed entity layouts, duplicate slots, invalid generations, and stale selection handles. Browser smoke selects the rendered probe entity and checks that its `slot:generation` ID and canvas-relative bounds appear in the lab. Save/load, visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
 
+Renderer reconciliation has pure unit coverage for slot updates, missing-entity removals, generation replacement, visual-type regrouping, newer-world resets, and stale snapshot rejection. Renderer diagnostics expose visual-group count, instance count, reset count, stale mapping count, and stale snapshot count so a browser stress run can prove that dropped or late projections do not resurrect presentation state.
+
 ## Visual tests
 
 The visual museum is intentionally small. A canonical Chromium run fixes the browser revision, viewport, device-pixel ratio, camera, seed, tick, render generation, animation time, fonts, graphics backend, and quality settings. A baseline update needs a reason, before/after artifacts, and unchanged structured state assertions.
