@@ -9,6 +9,7 @@ Use the smallest command that answers the question while developing:
 ```sh
 pnpm test
 pnpm typecheck
+pnpm quality:fallow
 cargo test --manifest-path rust/Cargo.toml --workspace --all-targets
 ```
 
@@ -18,7 +19,9 @@ Before committing a coherent change, run the complete gate:
 pnpm check
 ```
 
-`pnpm check` runs formatting, linting, strict TypeScript, Vitest, Rust Clippy/tests, the reproducible Wasm build, and the Vite production build.
+`pnpm check` runs formatting, linting, strict TypeScript, Vitest, the pinned Fallow structural audit, Rust Clippy/tests, the reproducible Wasm build, and the Vite production build.
+
+Fallow checks the TypeScript and JavaScript module graph for introduced dead code, duplication, and complexity. It complements ESLint and TypeScript; Rust determinism, protocol validity, native/Wasm parity, and browser behaviour still require their dedicated tests. Inline Fallow suppressions and Fallow config files are intentionally rejected by the repository policy check.
 
 ## Native simulation
 
