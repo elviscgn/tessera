@@ -134,10 +134,12 @@ jobs:
         run: |
           test "$(node --version)" = "v24.18.1"
           test "$(pnpm --version)" = "11.19.0"
-          test "$(pnpm exec playwright --version)" = "Version 1.60.0"
 
       - name: install JavaScript dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: verify Playwright toolchain
+        run: test "$(pnpm exec playwright --version)" = "Version 1.60.0"
 
       - name: download production shell
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
