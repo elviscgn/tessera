@@ -9,12 +9,11 @@ Tessera is delivered in small checkpoints so each release keeps a clear, reviewa
 - **Milestone 2A — Wasm/Worker command boundary:** explicit web-target Wasm startup, versioned commands, bounded tick calls, structured errors, and native/Wasm hash parity.
 - **Milestone 2B — packed data boundary:** render snapshots, reliable event batches, transferable buffers, memory-growth recovery, and parity fixtures.
 - **Milestone 3 — renderer lifecycle:** Babylon engine and scene ownership, Worker readiness, placeholder rendering, diagnostics, and idempotent disposal.
+- **Milestone 4 — isometric camera and coordinates:** right-handed orthographic projection, four rotations, pan/zoom/focus, floor-based grid conversion, and the camera laboratory.
 
 ## Next
 
-**Milestone 4 — isometric camera and coordinate conversion** is the next implementation checkpoint. It will establish the right-handed orthographic camera, four rotations, pan and zoom, focus, and screen/world/grid conversion rules.
-
-No work from Milestone 4 has started in the current checkpoint.
+**Milestone 5 — grid and occupancy** is the next implementation checkpoint. It will add authoritative occupancy, integer footprints, elevation invariants, and placement-cell visualization.
 
 ## Planned checkpoints
 

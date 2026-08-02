@@ -29,6 +29,7 @@
         width: 100%;
         height: 100%;
         outline: none;
+        touch-action: none;
       }
 
       #status {
@@ -45,12 +46,81 @@
           0.82rem ui-monospace,
           monospace;
       }
+
+      #cameraLab {
+        position: absolute;
+        z-index: 1;
+        right: 0.75rem;
+        bottom: 0.75rem;
+        width: min(18rem, calc(100% - 1.5rem));
+        padding: 0.8rem;
+        border: 1px solid #334155;
+        border-radius: 0.55rem;
+        background: rgb(9 12 19 / 88%);
+        color: #cbd5e1;
+        font-size: 0.8rem;
+        line-height: 1.45;
+        backdrop-filter: blur(0.35rem);
+      }
+
+      #cameraLab h2 {
+        margin: 0 0 0.45rem;
+        color: #f8fafc;
+        font-size: 0.9rem;
+        letter-spacing: 0.02em;
+      }
+
+      #cameraLab p {
+        margin: 0.25rem 0;
+      }
+
+      #cameraLab code {
+        color: #93c5fd;
+        font-family: ui-monospace, monospace;
+      }
+
+      #cameraControls {
+        display: flex;
+        gap: 0.4rem;
+        margin-top: 0.65rem;
+      }
+
+      #cameraControls button {
+        flex: 1;
+        border: 1px solid #475569;
+        border-radius: 0.35rem;
+        background: #172033;
+        color: #e2e8f0;
+        cursor: pointer;
+        padding: 0.35rem 0.45rem;
+      }
+
+      #cameraControls button:hover,
+      #cameraControls button:focus-visible {
+        border-color: #60a5fa;
+        outline: none;
+      }
     </style>
   </head>
   <body>
     <main id="app">
-      <canvas id="renderCanvas" aria-label="Tessera foundation viewport"></canvas>
+      <canvas id="renderCanvas" aria-label="Tessera isometric viewport" tabindex="0"></canvas>
       <output id="status" data-tessera-status="starting">Tessera starting</output>
+      <aside id="cameraLab" aria-label="Camera and coordinate laboratory">
+        <h2>Camera laboratory</h2>
+        <p>
+          Rotation <code id="cameraRotation">r0</code> · Zoom
+          <code id="cameraZoom">12.0 tiles</code>
+        </p>
+        <p>Target <code id="cameraTarget">0, 0, 0</code></p>
+        <p>Pointer cell <code id="pointerCell">—</code></p>
+        <p>Drag to pan · wheel to zoom · <code>Q</code>/<code>E</code> to rotate</p>
+        <div id="cameraControls">
+          <button type="button" data-camera-action="rotate-left">Rotate left</button>
+          <button type="button" data-camera-action="focus-origin">Focus origin</button>
+          <button type="button" data-camera-action="rotate-right">Rotate right</button>
+        </div>
+      </aside>
     </main>
     <script type="module" src="./src/main.ts"></script>
   </body>

@@ -11,6 +11,7 @@ import {
   type WorkerResponse,
 } from '../worker/bridge-protocol';
 import { ReliableEventReceiver, type EventStreamMetrics } from '../worker/reliable-events';
+import { CameraProjection, type CameraProjectionOptions } from '../renderer/isometric-camera';
 
 export type FoundationState = 'starting' | 'ready' | 'fatal' | 'disposed';
 
@@ -63,8 +64,12 @@ export interface FoundationWorker {
 export interface FoundationRuntimeOptions {
   readonly canvas: HTMLCanvasElement;
   readonly seed?: Uint8Array;
+  readonly camera?: CameraProjectionOptions;
   readonly workerFactory?: () => FoundationWorker;
-  readonly rendererFactory?: (canvas: HTMLCanvasElement) => FoundationRenderer;
+  readonly rendererFactory?: (
+    canvas: HTMLCanvasElement,
+    camera: CameraProjection,
+  ) => FoundationRenderer;
 }
 
 type CommandPending = {
@@ -85,8 +90,18 @@ const defaultWorkerFactory = (): FoundationWorker =>
     type: 'module',
   });
 
-const defaultRendererFactory = (canvas: HTMLCanvasElement): FoundationRenderer =>
-  new BabylonRenderer(canvas);
+const defaultRendererFactory = (
+  canvas: HTMLCanvasElement,
+  camera: CameraProjection,
+): FoundationRenderer => {
+  const renderer = new BabylonRenderer(canvas, camera);
+  return {
+    start: () => renderer.start(),
+    consumeSnapshot: (snapshot) => renderer.consumeSnapshot(snapshot),
+    diagnostics: () => renderer.diagnostics(),
+    dispose: () => renderer.dispose(),
+  };
+};
 
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
@@ -100,6 +115,7 @@ const asError = (error: unknown): Error =>
  */
 export class FoundationRuntime {
   public readonly ready: Promise<FoundationReady>;
+  public readonly camera: CameraProjection;
 
   private readonly worker: FoundationWorker;
   private readonly renderer: FoundationRenderer;
@@ -140,7 +156,11 @@ export class FoundationRuntime {
       this.rejectReady = reject;
     });
 
-    this.renderer = (options.rendererFactory ?? defaultRendererFactory)(options.canvas);
+    this.camera = new CameraProjection(options.camera);
+    this.renderer = (options.rendererFactory ?? defaultRendererFactory)(
+      options.canvas,
+      this.camera,
+    );
     try {
       this.renderer.start();
       this.worker = (options.workerFactory ?? defaultWorkerFactory)();

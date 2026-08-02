@@ -91,17 +91,21 @@ The renderer owns the engine, scene, camera, lights, materials, meshes, observer
 
 The project starts with ordinary Babylon instances because they support per-instance transforms and picking. Thin instances remain a measured performance experiment, not a default.
 
+The camera is a right-handed orthographic projection aligned with glTF. `+X` is east, `+Y` is up, and `+Z` is south. The presentation camera uses a mathematically symmetric isometric pitch, four clockwise quarter-turns, a target measured in millimetres, and a zoom expressed as visible tile height. Its pure `CameraProjection` model is shared by Babylon synchronization, screen/world/grid conversion, and the coordinate laboratory. Negative world boundaries use floor division, so `-1 mm` belongs to cell `-1` for a `1,000 mm` tile. Camera state remains presentation state and cannot affect Rust hashes or commands.
+
 ## Current implementation
 
-Milestone 3 provides the lifecycle foundation:
+Milestones 3 and 4 provide the lifecycle and camera foundation:
 
 - `FoundationRuntime` owns one Worker, one renderer, listeners, pending requests, readiness, diagnostics, and disposal;
 - `BabylonRenderer` creates a WebGL2 engine, right-handed scene, temporary camera, light, and one non-pickable placeholder box;
 - packed event and render messages are validated before the renderer sees them;
 - fatal startup, protocol, Worker, and renderer errors close the runtime and reject pending work;
 - `dispose()` is idempotent, including the Scenario Lab `pagehide` path.
+- `CameraProjection` provides deterministic grid centres, floor-based cell lookup, four rotations, pan/zoom/focus, and ray-plane conversion;
+- the Babylon camera is orthographic and follows the projection model, while Scenario Lab exposes named camera actions and coordinate readouts.
 
-The public entry point currently exposes lifecycle and readiness primitives only. Camera controls, grid placement, picking, entity-to-visual reconciliation, persistence, the development test bridge, and the consumer-facing scenario API are added in later milestones.
+The public entry point currently exposes lifecycle/readiness primitives and the presentation camera model. Grid placement, picking, entity-to-visual reconciliation, persistence, the development test bridge, and the consumer-facing scenario API are added in later milestones.
 
 ## Deliberate exclusions
 

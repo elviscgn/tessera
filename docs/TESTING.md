@@ -53,7 +53,7 @@ The Worker checks that:
 
 ## Browser checks
 
-The Scenario Lab is the first browser smoke target. At the current lifecycle milestone it checks the canvas, Babylon scene, render loop, Worker readiness, packed snapshot delivery, event acknowledgement, memory-generation diagnostics, and disposal on `pagehide`.
+The Scenario Lab is the first browser smoke target. It checks the canvas, Babylon scene, orthographic camera, named pan/zoom/rotation actions, screen-to-grid readout, render loop, Worker readiness, packed snapshot delivery, event acknowledgement, memory-generation diagnostics, and disposal on `pagehide`.
 
 The probe uses structured `data-tessera-*` attributes so browser tests can assert ticks, hashes, sequence numbers, buffer ownership, and render generations without relying on timing or pixels alone. The known native/Wasm probe hash is:
 
@@ -61,7 +61,7 @@ The probe uses structured `data-tessera-*` attributes so browser tests can asser
 24ebdfb8bf10251c184a2bcd57d48a6b7d77be51114fbcf75847f77f32adb104
 ```
 
-Camera, grid, selection, placement, save/load, visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
+Grid, selection, placement, save/load, visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
 
 ## Visual tests
 

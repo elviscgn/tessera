@@ -13,7 +13,7 @@ pub use command::{
     Command, CommandEnvelope, CommandReceipt, RejectionReason, ReplayCommand, ReplayLog,
 };
 pub use event::{EventKind, SimulationEvent};
-pub use grid::{GridPosition, QuarterTurn};
+pub use grid::{GridMathError, GridPosition, QuarterTurn, TileScale};
 pub use id::{EntityArena, EntityError, EntityId, EntityState};
 pub use rng::{RNG_ALGORITHM_VERSION, Seed};
 pub use simulation::{

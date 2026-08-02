@@ -1,4 +1,5 @@
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera';
+import { Camera } from '@babylonjs/core/Cameras/camera';
 import { Engine } from '@babylonjs/core/Engines/engine';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
@@ -8,6 +9,7 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Scene } from '@babylonjs/core/scene';
 import './register-loaders.js';
 import type { RenderSnapshotMetadata } from '../worker/data-protocol';
+import { CameraProjection, type CameraViewport } from './isometric-camera';
 
 /** Renderer-only counters exposed by the foundation runtime. */
 export interface RendererDiagnostics {
@@ -33,6 +35,8 @@ export class BabylonRenderer {
   private readonly light: HemisphericLight;
   private readonly placeholder: ReturnType<typeof MeshBuilder.CreateBox>;
   private readonly placeholderMaterial: StandardMaterial;
+  private readonly cameraProjection: CameraProjection;
+  private readonly unsubscribeCamera: () => void;
   private disposed = false;
   private started = false;
   private renderFrames = 0;
@@ -54,10 +58,11 @@ export class BabylonRenderer {
   private readonly resize = (): void => {
     if (!this.disposed) {
       this.engine.resize();
+      this.syncCamera();
     }
   };
 
-  public constructor(canvas: HTMLCanvasElement) {
+  public constructor(canvas: HTMLCanvasElement, cameraProjection?: CameraProjection) {
     if (!Engine.IsSupported) {
       throw new Error('tessera:renderer:webgl_unavailable:WebGL is not supported');
     }
@@ -74,11 +79,13 @@ export class BabylonRenderer {
     this.scene.useRightHandedSystem = true;
     this.scene.clearColor = new Color4(0.035, 0.047, 0.07, 1);
 
+    this.cameraProjection = cameraProjection ?? new CameraProjection();
     this.camera = new FreeCamera('tessera-foundation-camera', new Vector3(0, 3, -6), this.scene);
-    this.camera.setTarget(Vector3.Zero());
+    this.camera.mode = Camera.ORTHOGRAPHIC_CAMERA;
     this.camera.minZ = 0.1;
     this.camera.maxZ = 1000;
     this.scene.activeCamera = this.camera;
+    this.unsubscribeCamera = this.cameraProjection.subscribe(this.syncCamera);
 
     this.light = new HemisphericLight(
       'tessera-foundation-light',
@@ -103,6 +110,7 @@ export class BabylonRenderer {
 
     this.scene.onBeforeRenderObservable.add(this.beforeRender);
     window.addEventListener('resize', this.resize);
+    this.syncCamera();
   }
 
   /** Starts Babylon's render loop exactly once. */
@@ -148,6 +156,7 @@ export class BabylonRenderer {
     this.engine.stopRenderLoop(this.renderFrame);
     this.scene.onBeforeRenderObservable.removeCallback(this.beforeRender);
     window.removeEventListener('resize', this.resize);
+    this.unsubscribeCamera();
     this.placeholder.dispose(false, true);
     this.placeholderMaterial.dispose();
     this.light.dispose();
@@ -155,4 +164,40 @@ export class BabylonRenderer {
     this.scene.dispose();
     this.engine.dispose();
   }
+
+  private readonly viewport = (): CameraViewport => {
+    const canvas = this.engine.getRenderingCanvas();
+    const bounds = canvas?.getBoundingClientRect();
+    return {
+      width: Math.max(1, bounds?.width ?? this.engine.getRenderWidth()),
+      height: Math.max(1, bounds?.height ?? this.engine.getRenderHeight()),
+    };
+  };
+
+  private readonly syncCamera = (): void => {
+    if (this.disposed) {
+      return;
+    }
+    const viewport = this.viewport();
+    const pose = this.cameraProjection.pose();
+    const target = new Vector3(
+      pose.targetMm.xMm / 1000,
+      pose.targetMm.yMm / 1000,
+      pose.targetMm.zMm / 1000,
+    );
+    this.camera.position.copyFrom(
+      new Vector3(
+        pose.positionMm.xMm / 1000,
+        pose.positionMm.yMm / 1000,
+        pose.positionMm.zMm / 1000,
+      ),
+    );
+    this.camera.setTarget(target);
+    const bounds = this.cameraProjection.orthographicBounds(viewport);
+    this.camera.orthoLeft = bounds.left / 1000;
+    this.camera.orthoRight = bounds.right / 1000;
+    this.camera.orthoTop = bounds.top / 1000;
+    this.camera.orthoBottom = bounds.bottom / 1000;
+    this.camera.maxZ = Math.max(1000, (pose.distanceMm / 1000) * 4);
+  };
 }

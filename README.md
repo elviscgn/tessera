@@ -46,9 +46,9 @@ flowchart LR
 | **Deterministic kernel** | Fixed-tick Rust simulation, seeded randomness, generational IDs, replay, and canonical state hashes |
 | **Worker boundary**      | Versioned command, event, and render messages with packed validation                                |
 | **Wasm transport**       | `wasm-pack --target web`, transferable render buffers, and recovery after Wasm memory growth        |
-| **Browser shell**        | Babylon.js lifecycle, readiness, diagnostics, and deterministic shutdown                            |
+| **Browser shell**        | Babylon.js lifecycle, readiness, diagnostics, orthographic camera, and deterministic shutdown       |
 
-The next milestone is the isometric camera and canonical coordinate conversion. Placement, picking, persistence, the consumer-facing runtime API, and the full Scenario Lab remain in development.
+The next milestone is the authoritative grid and occupancy model. Placement, picking, persistence, the consumer-facing scenario API, and the full Scenario Lab remain in development.
 
 ## Running in the browser
 
