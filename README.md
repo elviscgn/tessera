@@ -135,6 +135,9 @@ Internal runtime paths are intentionally unavailable from the package.
 | Run or extend verification         | [Testing](docs/TESTING.md)             |
 | Measure performance and cleanup    | [Performance](docs/PERFORMANCE.md)     |
 | Inspect a browser failure          | [Observability](docs/OBSERVABILITY.md) |
+| Read the wire contract             | [Protocol](docs/PROTOCOL.md)           |
+| Understand visual asset rules      | [Assets](docs/ASSETS.md)               |
+| Review recorded decisions          | [Decisions](docs/DECISIONS.md)         |
 | Make a change                      | [Contributing](docs/CONTRIBUTING.md)   |
 | See what is next                   | [Roadmap](docs/ROADMAP.md)             |
 
