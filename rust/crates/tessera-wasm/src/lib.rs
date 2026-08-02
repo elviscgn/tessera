@@ -2,11 +2,14 @@
 
 //! Coarse wasm-bindgen adapter for the browser simulation Worker.
 
-use tessera_core::{Seed, Simulation, SimulationError};
+use tessera_core::{
+    Footprint, FootprintError, FootprintOffset, GridConfigurationError, GridPosition, QuarterTurn,
+    Seed, Simulation, SimulationError,
+};
 use tessera_protocol::{
-    CommandResponse, ProtocolError, RenderSnapshotDescriptor, decode_command_batch,
-    encode_command_response, encode_event_batch, encode_render_descriptor,
-    encode_render_snapshot_with_occupied_cells,
+    CommandResponse, PlacementValidationResponse, ProtocolError, RenderSnapshotDescriptor,
+    decode_command_batch, encode_command_response, encode_event_batch, encode_placement_validation,
+    encode_render_descriptor, encode_render_snapshot_with_occupied_cells,
 };
 use wasm_bindgen::prelude::*;
 
@@ -57,6 +60,29 @@ impl TesseraWasm {
             .map_err(|message| JsValue::from_str(&message))
     }
 
+    /// Registers one declarative object type before the first command is run.
+    pub fn register_object_type(
+        &mut self,
+        id: &str,
+        footprint_offsets: &[i32],
+    ) -> Result<u32, JsValue> {
+        self.register_object_type_inner(id, footprint_offsets)
+            .map_err(|message| JsValue::from_str(&message))
+    }
+
+    /// Queries authoritative occupancy for a prospective placement without mutation.
+    pub fn validate_placement(
+        &self,
+        object_type: u32,
+        x: i32,
+        z: i32,
+        elevation_mm: i32,
+        rotation: u8,
+    ) -> Result<Vec<u8>, JsValue> {
+        self.validate_placement_inner(object_type, x, z, elevation_mm, rotation)
+            .map_err(|message| JsValue::from_str(&message))
+    }
+
     /// Returns the adapter contract version used by the Worker readiness message.
     pub fn adapter_version(&self) -> u16 {
         WASM_ADAPTER_VERSION
@@ -102,6 +128,87 @@ impl TesseraWasm {
 }
 
 impl TesseraWasm {
+    fn register_object_type_inner(
+        &mut self,
+        id: &str,
+        footprint_offsets: &[i32],
+    ) -> Result<u32, String> {
+        if self.disposed {
+            return Err(adapter_error_text(
+                "startup",
+                "disposed",
+                "the Wasm simulation has been disposed",
+            ));
+        }
+        if !footprint_offsets.len().is_multiple_of(2) {
+            return Err(adapter_error_text(
+                "startup",
+                "invalid_footprint",
+                "footprint offsets must contain dx,dz pairs",
+            ));
+        }
+        let footprint = Footprint::new(
+            footprint_offsets
+                .chunks_exact(2)
+                .map(|pair| FootprintOffset::new(pair[0], pair[1])),
+        )
+        .map_err(|error| footprint_error_text("startup", error))?;
+        self.simulation
+            .register_object_type(id, footprint)
+            .map_err(|error| grid_configuration_error_text("startup", error))
+    }
+
+    fn validate_placement_inner(
+        &self,
+        object_type: u32,
+        x: i32,
+        z: i32,
+        elevation_mm: i32,
+        rotation: u8,
+    ) -> Result<Vec<u8>, String> {
+        if self.disposed {
+            return Err(adapter_error_text(
+                "placement",
+                "disposed",
+                "the Wasm simulation has been disposed",
+            ));
+        }
+        if rotation > 3 {
+            return Err(adapter_error_text(
+                "placement",
+                "invalid_rotation",
+                "rotation must be in the range 0..3",
+            ));
+        }
+        let position = GridPosition::new(x, z, elevation_mm);
+        let rotation = QuarterTurn::from_index(rotation);
+        let result = self
+            .simulation
+            .validate_placement(object_type, position, rotation);
+        let (valid, rejection_reason, occupied_cell_count) = match result {
+            Ok(count) => (
+                true,
+                None,
+                u32::try_from(count).map_err(|_| {
+                    adapter_error_text(
+                        "placement",
+                        "count_overflow",
+                        "footprint cell count exceeds the protocol range",
+                    )
+                })?,
+            ),
+            Err(reason) => (false, Some(reason), 0),
+        };
+        Ok(encode_placement_validation(PlacementValidationResponse {
+            object_type,
+            position,
+            rotation,
+            valid,
+            rejection_reason,
+            occupied_cell_count,
+        }))
+    }
+
     fn render_snapshot_descriptor_inner(&mut self) -> Result<Vec<u8>, String> {
         if self.disposed {
             return Err(adapter_error_text(
@@ -277,6 +384,32 @@ fn simulation_error_text(phase: &str, error: SimulationError) -> String {
     )
 }
 
+fn grid_configuration_error_text(phase: &str, error: GridConfigurationError) -> String {
+    let code = match error {
+        GridConfigurationError::InvalidObjectType => "invalid_object_type",
+        GridConfigurationError::InvalidObjectTypeId => "invalid_object_type_id",
+        GridConfigurationError::DuplicateObjectTypeId => "duplicate_object_type_id",
+        GridConfigurationError::ObjectTypeOrderViolation => "object_type_order",
+        GridConfigurationError::WorldAlreadyStarted => "world_already_started",
+    };
+    adapter_error_text(
+        phase,
+        code,
+        "object type definitions are not valid for this world",
+    )
+}
+
+fn footprint_error_text(phase: &str, error: FootprintError) -> String {
+    let code = match error {
+        FootprintError::Empty => "empty_footprint",
+        FootprintError::DuplicateCell => "duplicate_footprint_cell",
+        FootprintError::ZeroDimension => "zero_footprint_dimension",
+        FootprintError::TooLarge => "footprint_too_large",
+        FootprintError::CoordinateOverflow => "footprint_coordinate_overflow",
+    };
+    adapter_error_text(phase, code, "the object footprint is invalid")
+}
+
 fn adapter_error_text(phase: &str, code: &str, message: &str) -> String {
     format!("tessera:{phase}:{code}:{message}")
 }
@@ -290,7 +423,8 @@ mod tests {
     use super::*;
     use tessera_core::{Command, CommandEnvelope, GridPosition, QuarterTurn};
     use tessera_protocol::{
-        CommandBatch, MAX_EVENT_RECORD_COUNT, decode_event_batch, encode_command_batch,
+        CommandBatch, MAX_EVENT_RECORD_COUNT, decode_event_batch, decode_placement_validation,
+        encode_command_batch,
     };
 
     fn batch() -> Vec<u8> {
@@ -352,5 +486,22 @@ mod tests {
             .expect_err("an invalid magic must fail before mutation");
         assert!(error.starts_with("tessera:command:invalid_magic:"));
         assert_eq!(adapter.simulation.tick(), 0);
+    }
+
+    #[test]
+    fn object_type_registration_and_placement_query_stay_in_rust() {
+        let mut adapter = TesseraWasm::new(&[7; 32]).unwrap();
+        assert_eq!(
+            adapter
+                .register_object_type_inner("foundation", &[0, 0, 1, 0])
+                .unwrap(),
+            1
+        );
+        let result =
+            decode_placement_validation(&adapter.validate_placement_inner(1, 2, -3, 0, 1).unwrap())
+                .unwrap();
+        assert!(result.valid);
+        assert_eq!(result.occupied_cell_count, 2);
+        assert_eq!(result.object_type, 1);
     }
 }

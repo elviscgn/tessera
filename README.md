@@ -48,8 +48,9 @@ flowchart LR
 | **Wasm transport**       | `wasm-pack --target web`, transferable render buffers, and recovery after Wasm memory growth                |
 | **Browser shell**        | Babylon.js lifecycle, readiness, diagnostics, orthographic camera, occupancy overlay, picking, and shutdown |
 | **Selection**            | Stable `slot:generation` IDs, canvas picking, screen-space bounds, and stale-generation checks              |
+| **Placement**            | Rust-owned object registries, non-mutating placement queries, preview state, placement, move, and removal   |
 
-The authoritative grid, occupancy model, and first selection path are now in place. Placement, persistence, the consumer-facing scenario API, and the full Scenario Lab remain in development.
+The authoritative grid, occupancy model, selection path, and first declarative placement flow are now in place. Persistence, the wider consumer-facing scenario API, and the full Scenario Lab remain in development.
 
 ## Running in the browser
 

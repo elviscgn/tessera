@@ -1,7 +1,8 @@
-import init, { TesseraWasm } from './wasm/tessera_wasm.js';
+import { init, TesseraWasm } from './wasm/tessera_wasm.js';
 import {
   bytesToHex,
   decodeCommandResponse,
+  decodePlacementValidation,
   MAX_EXACT_TICKS_PER_CALL,
   parseWasmError,
   PROTOCOL_VERSION,
@@ -213,11 +214,20 @@ const handleInitialize = async (request: InitializeRequest): Promise<void> => {
     syncMemoryViews();
     bufferPool = new TransferableBufferPool(3);
     simulation = new TesseraWasm(new Uint8Array(request.seed));
+    const objectTypeHandles: Array<{ readonly id: string; readonly handle: number }> = [];
+    for (const definition of request.objectTypes) {
+      const handle = simulation.register_object_type(
+        definition.id,
+        new Int32Array(definition.footprint),
+      );
+      objectTypeHandles.push({ id: definition.id, handle });
+    }
     post({
       type: 'startup-ready',
       protocolVersion: PROTOCOL_VERSION,
       adapterVersion: simulation.adapter_version(),
       tick: toSafeNumber(simulation.tick(), 'startup tick'),
+      objectTypeHandles,
       metrics: metrics(),
     });
   } catch (error: unknown) {
@@ -279,6 +289,53 @@ const handleCommand = (request: CommandRequest): void => {
     );
     publishEvents(highestAcknowledgedEvent);
     publishRenderSnapshot();
+  } catch (error: unknown) {
+    const failure = parseWasmError(error);
+    if (failure.type === 'fatal-error') {
+      fatal = true;
+      simulation.free();
+      simulation = undefined;
+    }
+    postError(
+      failure.type,
+      failure.type === 'fatal-error' ? 'fatal' : 'command',
+      failure.code,
+      failure.message,
+      request.requestId,
+    );
+  }
+};
+
+const handlePlacementValidation = (
+  request: Extract<WorkerRequest, { type: 'validate-placement' }>,
+): void => {
+  if (!simulation || fatal) {
+    postError(
+      'command-error',
+      'command',
+      fatal ? 'worker_fatal' : 'not_ready',
+      fatal
+        ? 'the Worker is in a fatal state and requires restart'
+        : 'the Worker has not completed startup',
+      request.requestId,
+    );
+    return;
+  }
+  try {
+    const responseBytes = simulation.validate_placement(
+      request.input.objectType,
+      request.input.x,
+      request.input.z,
+      request.input.elevationMm,
+      request.input.rotation,
+    );
+    const result = decodePlacementValidation(responseBytes);
+    post({
+      type: 'placement-validation',
+      requestId: request.requestId,
+      result,
+      metrics: metrics(),
+    });
   } catch (error: unknown) {
     const failure = parseWasmError(error);
     if (failure.type === 'fatal-error') {
@@ -368,6 +425,8 @@ workerScope.addEventListener('message', (event: MessageEvent<WorkerRequest>) => 
     void handleInitialize(request);
   } else if (request.type === 'command') {
     handleCommand(request);
+  } else if (request.type === 'validate-placement') {
+    handlePlacementValidation(request);
   } else if (request.type === 'ack-events') {
     handleAckEvents(request);
   } else if (request.type === 'request-events') {

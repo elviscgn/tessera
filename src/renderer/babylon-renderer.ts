@@ -17,6 +17,7 @@ import type {
   RenderSnapshotMetadata,
 } from '../worker/data-protocol';
 import { CameraProjection, type CameraViewport } from './isometric-camera';
+import type { PlacementPreview } from '../public/runtime-types';
 import {
   boundsFromPoints,
   formatEntityId,
@@ -66,6 +67,9 @@ export class BabylonRenderer {
   private readonly selectedMaterial: StandardMaterial;
   private readonly debugGridMaterial: StandardMaterial;
   private readonly occupiedMaterial: StandardMaterial;
+  private readonly placementValidMaterial: StandardMaterial;
+  private readonly placementInvalidMaterial: StandardMaterial;
+  private readonly placementPreview: ReturnType<typeof MeshBuilder.CreateBox>;
   private readonly cameraProjection: CameraProjection;
   private readonly unsubscribeCamera: () => void;
   private debugGrid: LinesMesh | undefined;
@@ -167,6 +171,30 @@ export class BabylonRenderer {
     this.occupiedMaterial.emissiveColor = new Color3(0.25, 0.08, 0.02);
     this.occupiedMaterial.alpha = 0.32;
     this.occupiedMaterial.disableLighting = true;
+
+    this.placementValidMaterial = new StandardMaterial(
+      'tessera-placement-valid-material',
+      this.scene,
+    );
+    this.placementValidMaterial.diffuseColor = new Color3(0.3, 0.9, 0.5);
+    this.placementValidMaterial.emissiveColor = new Color3(0.06, 0.3, 0.12);
+    this.placementValidMaterial.alpha = 0.42;
+    this.placementValidMaterial.disableLighting = true;
+    this.placementInvalidMaterial = new StandardMaterial(
+      'tessera-placement-invalid-material',
+      this.scene,
+    );
+    this.placementInvalidMaterial.diffuseColor = new Color3(0.95, 0.3, 0.25);
+    this.placementInvalidMaterial.emissiveColor = new Color3(0.3, 0.05, 0.03);
+    this.placementInvalidMaterial.alpha = 0.42;
+    this.placementInvalidMaterial.disableLighting = true;
+    this.placementPreview = MeshBuilder.CreateBox(
+      'tessera-placement-preview',
+      { size: 1 },
+      this.scene,
+    );
+    this.placementPreview.isPickable = false;
+    this.placementPreview.isVisible = false;
 
     this.unsubscribeCamera = this.cameraProjection.subscribe(this.syncCamera);
 
@@ -274,6 +302,30 @@ export class BabylonRenderer {
     return boundsFromPoints(points);
   }
 
+  /** Updates the presentation-only placement preview. */
+  public setPlacementPreview(preview: PlacementPreview | undefined): void {
+    if (this.disposed) {
+      return;
+    }
+    if (preview === undefined) {
+      this.placementPreview.isVisible = false;
+      return;
+    }
+    const tileSize = this.cameraProjection.tileSizeMm / 1000;
+    this.placementPreview.isVisible = true;
+    this.placementPreview.position.set(
+      (preview.x + 0.5) * tileSize,
+      preview.elevationMm / 1000 + tileSize / 2,
+      (preview.z + 0.5) * tileSize,
+    );
+    this.placementPreview.scaling.set(tileSize, tileSize, tileSize);
+    this.placementPreview.rotation.y = (preview.rotation * Math.PI) / 2;
+    this.placementPreview.material =
+      preview.pending || !preview.valid
+        ? this.placementInvalidMaterial
+        : this.placementValidMaterial;
+  }
+
   public diagnostics(): RendererDiagnostics {
     return {
       renderFrames: this.renderFrames,
@@ -314,6 +366,9 @@ export class BabylonRenderer {
     this.selectedMaterial.dispose();
     this.debugGridMaterial.dispose();
     this.occupiedMaterial.dispose();
+    this.placementPreview.dispose(false, true);
+    this.placementValidMaterial.dispose();
+    this.placementInvalidMaterial.dispose();
     this.light.dispose();
     this.camera.dispose();
     this.scene.dispose();

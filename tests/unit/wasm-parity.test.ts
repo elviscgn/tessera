@@ -4,6 +4,7 @@ import { initSync, TesseraWasm } from '../../src/worker/wasm/tessera_wasm.js';
 import {
   bytesToHex,
   decodeCommandResponse,
+  decodePlacementValidation,
   encodeSpawnCommandBatch,
 } from '../../src/worker/bridge-protocol';
 import {
@@ -79,6 +80,28 @@ describe('generated web-target Wasm adapter', () => {
       );
       expect(secondSnapshot.snapshotGeneration).toBeGreaterThan(firstSnapshot.snapshotGeneration);
       expect(secondSnapshot.entityCount).toBe(firstSnapshot.entityCount);
+    } finally {
+      adapter.free();
+    }
+  });
+
+  it('keeps declarative footprints and placement queries in the Rust adapter', () => {
+    initSync({
+      module: readFileSync(new URL('../../src/worker/wasm/tessera_wasm_bg.wasm', import.meta.url)),
+    });
+    const adapter = new TesseraWasm(new Uint8Array(32).fill(7));
+    try {
+      expect(adapter.register_object_type('foundation', new Int32Array([0, 0, 1, 0]))).toBe(1);
+      const result = decodePlacementValidation(adapter.validate_placement(1, -2, 3, 250, 1));
+      expect(result).toMatchObject({
+        objectType: 1,
+        x: -2,
+        z: 3,
+        elevationMm: 250,
+        rotation: 1,
+        valid: true,
+        occupiedCellCount: 2,
+      });
     } finally {
       adapter.free();
     }

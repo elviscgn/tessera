@@ -32,6 +32,10 @@ export class TesseraWasm {
      */
     constructor(seed: Uint8Array);
     /**
+     * Registers one declarative object type before the first command is run.
+     */
+    register_object_type(id: string, footprint_offsets: Int32Array): number;
+    /**
      * Builds the latest packed snapshot and returns a descriptor into Wasm memory.
      */
     render_snapshot_descriptor(): Uint8Array;
@@ -44,6 +48,10 @@ export class TesseraWasm {
      * Returns the current authoritative tick.
      */
     tick(): bigint;
+    /**
+     * Queries authoritative occupancy for a prospective placement without mutation.
+     */
+    validate_placement(object_type: number, x: number, z: number, elevation_mm: number, rotation: number): Uint8Array;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -57,13 +65,16 @@ export interface InitOutput {
     readonly tesserawasm_event_batch: (a: number, b: bigint, c: number) => [number, number, number, number];
     readonly tesserawasm_latest_event_sequence: (a: number) => bigint;
     readonly tesserawasm_new: (a: number, b: number) => [number, number, number];
+    readonly tesserawasm_register_object_type: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly tesserawasm_render_snapshot_descriptor: (a: number) => [number, number, number, number];
     readonly tesserawasm_run_command_batch: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly tesserawasm_tick: (a: number) => bigint;
+    readonly tesserawasm_validate_placement: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
+    readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_start: () => void;
 }
 
@@ -87,4 +98,4 @@ export function initSync(module: { module: SyncInitInput } | SyncInitInput): Ini
  *
  * @returns {Promise<InitOutput>}
  */
-export default function __wbg_init (module_or_path?: { module_or_path: InitInput | Promise<InitInput> } | InitInput | Promise<InitInput>): Promise<InitOutput>;
+export function init (module_or_path?: { module_or_path: InitInput | Promise<InitInput> } | InitInput | Promise<InitInput>): Promise<InitOutput>;

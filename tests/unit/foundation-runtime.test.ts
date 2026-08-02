@@ -158,6 +158,32 @@ class FakeWorker implements FoundationWorker {
   }
 }
 
+const latestRequest = (worker: FakeWorker): WorkerRequest => {
+  const request = worker.messages.at(-1)?.message;
+  if (request === undefined) {
+    throw new Error('expected a Worker request');
+  }
+  return request;
+};
+
+const latestCommandRequest = (worker: FakeWorker): Extract<WorkerRequest, { type: 'command' }> => {
+  const request = latestRequest(worker);
+  if (request.type !== 'command') {
+    throw new Error('expected a command request');
+  }
+  return request;
+};
+
+const latestPlacementRequest = (
+  worker: FakeWorker,
+): Extract<WorkerRequest, { type: 'validate-placement' }> => {
+  const request = latestRequest(worker);
+  if (request.type !== 'validate-placement') {
+    throw new Error('expected a placement validation request');
+  }
+  return request;
+};
+
 describe('foundation runtime lifecycle', () => {
   it('owns readiness, Worker synchronization, snapshot returns, and idempotent disposal', async () => {
     const worker = new FakeWorker();
@@ -183,6 +209,7 @@ describe('foundation runtime lifecycle', () => {
       protocolVersion: 1,
       adapterVersion: 1,
       tick: 0,
+      objectTypeHandles: [],
       metrics: metrics(),
     });
     await expect(runtime.ready).resolves.toMatchObject({ tick: 0, protocolVersion: 1 });
@@ -266,6 +293,121 @@ describe('foundation runtime lifecycle', () => {
     expect(runtime.diagnostics().lastError?.code).toBe('wasm_init');
   });
 
+  it('registers declarative object types and routes placement queries through Rust', async () => {
+    const worker = new FakeWorker();
+    const renderer = new FakeRenderer();
+    const runtime = createFoundationRuntime({
+      canvas: {} as HTMLCanvasElement,
+      objectTypes: [
+        {
+          id: 'foundation',
+          footprint: [
+            { dx: 1, dz: 0 },
+            { dx: 0, dz: 0 },
+          ],
+        },
+      ],
+      workerFactory: () => worker,
+      rendererFactory: () => renderer,
+    });
+    const initialize = worker.messages[0]?.message;
+    expect(initialize).toMatchObject({ type: 'initialize', objectTypes: [{ id: 'foundation' }] });
+    worker.emit({
+      type: 'startup-ready',
+      protocolVersion: 1,
+      adapterVersion: 1,
+      tick: 0,
+      objectTypeHandles: [{ id: 'foundation', handle: 1 }],
+      metrics: metrics(),
+    });
+    await runtime.ready;
+    expect(runtime.objectTypeHandle('foundation')).toBe(1);
+
+    const query = runtime.validatePlacement({
+      objectType: 'foundation',
+      x: 2,
+      z: -1,
+      elevationMm: 0,
+      rotation: 0,
+    });
+    const request = latestPlacementRequest(worker);
+    worker.emit({
+      type: 'placement-validation',
+      requestId: request.requestId,
+      result: {
+        objectType: 1,
+        x: 2,
+        z: -1,
+        elevationMm: 0,
+        rotation: 0,
+        valid: true,
+        occupiedCellCount: 2,
+      },
+      metrics: metrics(),
+    });
+    await expect(query).resolves.toMatchObject({
+      objectType: 'foundation',
+      valid: true,
+      occupiedCellCount: 2,
+    });
+    runtime.clearPlacementPreview();
+    expect(runtime.diagnostics().placementPreview).toBeUndefined();
+
+    const placementCommand = runtime.placeObject({
+      objectType: 'foundation',
+      x: 2,
+      z: -1,
+      elevationMm: 0,
+      rotation: 0,
+    });
+    const placementRequest = latestCommandRequest(worker);
+    expect(new DataView(placementRequest.bytes).getUint16(28, true)).toBe(1);
+    worker.emit({
+      type: 'command-result',
+      requestId: placementRequest.requestId,
+      batchSequence: 1,
+      tick: 1,
+      stateHashHex: 'cd'.repeat(32),
+      response: new ArrayBuffer(64),
+      metrics: metrics(),
+    });
+    await placementCommand;
+
+    const moveCommand = runtime.moveObject('0:1', {
+      x: 3,
+      z: -1,
+      elevationMm: 0,
+      rotation: 1,
+    });
+    const moveRequest = latestCommandRequest(worker);
+    expect(new DataView(moveRequest.bytes).getUint16(28, true)).toBe(3);
+    worker.emit({
+      type: 'command-result',
+      requestId: moveRequest.requestId,
+      batchSequence: 2,
+      tick: 2,
+      stateHashHex: 'de'.repeat(32),
+      response: new ArrayBuffer(64),
+      metrics: metrics(),
+    });
+    await moveCommand;
+
+    const removalCommand = runtime.removeEntity('0:1');
+    const removalRequest = latestCommandRequest(worker);
+    expect(new DataView(removalRequest.bytes).getUint16(28, true)).toBe(4);
+    worker.emit({
+      type: 'command-result',
+      requestId: removalRequest.requestId,
+      batchSequence: 3,
+      tick: 3,
+      stateHashHex: 'ef'.repeat(32),
+      response: new ArrayBuffer(64),
+      metrics: metrics(),
+    });
+    await removalCommand;
+    runtime.dispose();
+  });
+
   it('supports repeated create-ready-dispose cycles with independent owners', async () => {
     for (let cycle = 0; cycle < 3; cycle += 1) {
       const worker = new FakeWorker();
@@ -280,6 +422,7 @@ describe('foundation runtime lifecycle', () => {
         protocolVersion: 1,
         adapterVersion: 1,
         tick: 0,
+        objectTypeHandles: [],
         metrics: metrics(),
       });
       await runtime.ready;

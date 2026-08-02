@@ -11,12 +11,33 @@ import {
 import {
   type BoundaryMetrics,
   type CommandResultResponse,
+  type PlacementValidationResponseMessage,
+  type WorkerObjectTypeDefinition,
   type WorkerRequest,
   type WorkerResponse,
 } from '../worker/bridge-protocol';
 import { ReliableEventReceiver, type EventStreamMetrics } from '../worker/reliable-events';
 import { CameraProjection, type CameraProjectionOptions } from '../renderer/isometric-camera';
-import { type EntityId, type ScreenBounds, type ScreenPoint } from '../renderer/entity-selection';
+import {
+  parseEntityId,
+  type EntityId,
+  type EntityHandle,
+  type ScreenBounds,
+  type ScreenPoint,
+} from '../renderer/entity-selection';
+import {
+  encodeMoveCommandBatch,
+  encodeRemoveCommandBatch,
+  encodeSpawnCommandBatch,
+} from '../worker/bridge-protocol';
+import type {
+  EntityTransformTarget,
+  ObjectTypeDefinition,
+  PlacementPreview,
+  PlacementTarget,
+  PlacementValidation,
+  ScenarioDefinition,
+} from '../public/runtime-types';
 
 export type FoundationState = 'starting' | 'ready' | 'fatal' | 'disposed';
 
@@ -38,6 +59,7 @@ export interface FoundationDiagnostics {
   readonly eventStream: EventStreamMetrics;
   readonly renderer: RendererDiagnostics;
   readonly selectedEntityId?: EntityId;
+  readonly placementPreview?: PlacementPreview;
   readonly lastError?: FoundationError;
 }
 
@@ -45,6 +67,7 @@ export interface FoundationReady {
   readonly protocolVersion: number;
   readonly adapterVersion: number;
   readonly tick: number;
+  readonly objectTypeHandles: readonly { readonly id: string; readonly handle: number }[];
   readonly metrics: BoundaryMetrics;
 }
 
@@ -59,6 +82,7 @@ export interface FoundationRenderer {
   selectedEntity?(): EntityId | undefined;
   subscribeSelection?(listener: (entityId: EntityId | undefined) => void): () => void;
   screenBounds?(entityId: EntityId): ScreenBounds | undefined;
+  setPlacementPreview?(preview: PlacementPreview | undefined): void;
   diagnostics(): RendererDiagnostics;
   dispose(): void;
 }
@@ -84,6 +108,8 @@ export interface FoundationRuntimeOptions {
     canvas: HTMLCanvasElement,
     camera: CameraProjection,
   ) => FoundationRenderer;
+  readonly objectTypes?: readonly ObjectTypeDefinition[];
+  readonly scenario?: ScenarioDefinition;
 }
 
 type CommandPending = {
@@ -96,6 +122,16 @@ type MetricsPending = {
   readonly reject: (error: Error) => void;
 };
 
+type PlacementPending = {
+  readonly resolve: (result: PlacementValidation) => void;
+  readonly reject: (error: Error) => void;
+};
+
+type EntityCommand = {
+  readonly entity: EntityHandle;
+  readonly ids: { readonly clientSequence: bigint; readonly batchSequence: bigint };
+};
+
 type WaitKind = 'simulationTick' | 'renderTick' | 'renderGeneration';
 
 type Waiter = {
@@ -105,6 +141,61 @@ type Waiter = {
 };
 
 const defaultSeed = (): Uint8Array => new Uint8Array(32).fill(7);
+
+const publicIdPattern = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
+
+const assertPublicId = (id: string, label: string): void => {
+  if (id.length === 0 || id.length > 128 || !publicIdPattern.test(id)) {
+    throw new Error(
+      `tessera:startup:invalid_${label}_id:${label} IDs must be 1..128 ASCII characters`,
+    );
+  }
+};
+
+const assertI32Value = (value: number, label: string): void => {
+  if (!Number.isInteger(value) || value < -0x80000000 || value > 0x7fffffff) {
+    throw new Error(`tessera:startup:invalid_${label}:${label} must be a signed 32-bit integer`);
+  }
+};
+
+const normalizeObjectTypes = (
+  definitions: readonly ObjectTypeDefinition[] | undefined,
+): readonly WorkerObjectTypeDefinition[] => {
+  const sorted = [...(definitions ?? [])].sort((left, right) =>
+    left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+  );
+  const seen = new Set<string>();
+  return sorted.map((definition) => {
+    assertPublicId(definition.id, 'object_type');
+    if (!seen.add(definition.id)) {
+      throw new Error(`tessera:startup:duplicate_object_type_id:${definition.id}`);
+    }
+    const footprint = definition.footprint ?? [{ dx: 0, dz: 0 }];
+    if (footprint.length === 0) {
+      throw new Error(`tessera:startup:empty_footprint:${definition.id}`);
+    }
+    const flat: number[] = [];
+    const offsets = new Set<string>();
+    for (const offset of footprint) {
+      assertI32Value(offset.dx, 'footprint_dx');
+      assertI32Value(offset.dz, 'footprint_dz');
+      const key = `${offset.dx}:${offset.dz}`;
+      if (!offsets.add(key)) {
+        throw new Error(`tessera:startup:duplicate_footprint_cell:${definition.id}:${key}`);
+      }
+      flat.push(offset.dx, offset.dz);
+    }
+    return { id: definition.id, footprint: flat };
+  });
+};
+
+const normalizeScenario = (scenario: ScenarioDefinition | undefined): string | undefined => {
+  if (scenario === undefined) {
+    return undefined;
+  }
+  assertPublicId(scenario.id, 'scenario');
+  return scenario.id;
+};
 
 const defaultWorkerFactory = (): FoundationWorker =>
   new Worker(new URL('../worker/foundation.worker.ts', import.meta.url), {
@@ -125,6 +216,7 @@ const defaultRendererFactory = (
     selectedEntity: () => renderer.selectedEntity(),
     subscribeSelection: (listener) => renderer.subscribeSelection(listener),
     screenBounds: (entityId) => renderer.screenBounds(entityId),
+    setPlacementPreview: (preview) => renderer.setPlacementPreview(preview),
     diagnostics: () => renderer.diagnostics(),
     dispose: () => renderer.dispose(),
   };
@@ -161,6 +253,7 @@ export class FoundationRuntime {
   private readonly renderer: FoundationRenderer;
   private readonly eventReceiver = new ReliableEventReceiver();
   private readonly pendingCommands = new Map<number, CommandPending>();
+  private readonly pendingPlacements = new Map<number, PlacementPending>();
   private readonly pendingMetrics = new Map<number, MetricsPending>();
   private readonly diagnosticListeners = new Set<(diagnostics: FoundationDiagnostics) => void>();
   private resolveReady!: (ready: FoundationReady) => void;
@@ -179,12 +272,38 @@ export class FoundationRuntime {
   private workerTerminated = false;
   private selectedEntityId: EntityId | undefined;
   private readonly selectionListeners = new Set<(entityId: EntityId | undefined) => void>();
+  private readonly objectTypeHandles = new Map<string, number>();
+  private nextClientSequence = 1n;
+  private nextBatchSequence = 1n;
+  private placementPreview: PlacementPreview | undefined;
   private readonly waiters: Record<WaitKind, Waiter[]> = {
     simulationTick: [],
     renderTick: [],
     renderGeneration: [],
   };
   private readonly noErrorWaiters = new Set<Waiter>();
+  private readonly responseHandlers: Readonly<
+    Record<WorkerResponse['type'], (response: WorkerResponse) => void>
+  > = {
+    'startup-ready': (response) =>
+      this.handleStartupReady(response as Extract<WorkerResponse, { type: 'startup-ready' }>),
+    'placement-validation': (response) =>
+      this.handlePlacementValidation(
+        response as Extract<WorkerResponse, { type: 'placement-validation' }>,
+      ),
+    'command-result': (response) =>
+      this.handleCommandResult(response as Extract<WorkerResponse, { type: 'command-result' }>),
+    'event-batch': (response) =>
+      this.handleEventBatch(response as Extract<WorkerResponse, { type: 'event-batch' }>),
+    'render-snapshot': (response) =>
+      this.handleRenderSnapshot(response as Extract<WorkerResponse, { type: 'render-snapshot' }>),
+    metrics: (response) =>
+      this.handleMetrics(response as Extract<WorkerResponse, { type: 'metrics' }>),
+    'command-error': (response) =>
+      this.handleWorkerError(response as Extract<WorkerResponse, { type: 'command-error' }>),
+    'fatal-error': (response) =>
+      this.handleWorkerError(response as Extract<WorkerResponse, { type: 'fatal-error' }>),
+  };
 
   private readonly onMessage = (event: MessageEvent<WorkerResponse>): void => {
     this.handleMessage(event.data);
@@ -199,6 +318,8 @@ export class FoundationRuntime {
     if (seed.byteLength !== 32) {
       throw new Error('tessera:startup:invalid_seed:seed must be 32 bytes');
     }
+    const objectTypes = normalizeObjectTypes(options.objectTypes);
+    const scenarioId = normalizeScenario(options.scenario);
     this.ready = new Promise<FoundationReady>((resolve, reject) => {
       this.resolveReady = resolve;
       this.rejectReady = reject;
@@ -214,7 +335,12 @@ export class FoundationRuntime {
       this.worker = (options.workerFactory ?? defaultWorkerFactory)();
       this.worker.addEventListener('message', this.onMessage);
       this.worker.addEventListener('error', this.onWorkerError);
-      this.worker.postMessage({ type: 'initialize', seed });
+      this.worker.postMessage({
+        type: 'initialize',
+        seed,
+        objectTypes,
+        ...(scenarioId === undefined ? {} : { scenarioId }),
+      });
     } catch (error: unknown) {
       this.renderer.dispose();
       throw asError(error);
@@ -264,6 +390,7 @@ export class FoundationRuntime {
       eventStream: this.eventReceiver.metrics(),
       renderer: this.renderer.diagnostics(),
       ...(this.selectedEntityId === undefined ? {} : { selectedEntityId: this.selectedEntityId }),
+      ...(this.placementPreview === undefined ? {} : { placementPreview: this.placementPreview }),
     };
     return {
       ...baseDiagnostics,
@@ -304,6 +431,134 @@ export class FoundationRuntime {
 
   public screenBounds(entityId: EntityId): ScreenBounds | undefined {
     return this.renderer.screenBounds?.(entityId);
+  }
+
+  /** Returns the Rust-assigned handle for a configured public object ID. */
+  public objectTypeHandle(id: string): number | undefined {
+    return this.objectTypeHandles.get(id);
+  }
+
+  /** Queries Rust occupancy without mutating the world. */
+  public validatePlacement(target: PlacementTarget): Promise<PlacementValidation> {
+    this.assertPlacementTarget(target);
+    const objectType = this.resolvePlacementHandle(target.objectType, 'placement');
+    if (objectType instanceof Error) {
+      return Promise.reject(objectType);
+    }
+    const requestId = this.allocateRequestId();
+    return new Promise<PlacementValidation>((resolve, reject) => {
+      this.pendingPlacements.set(requestId, { resolve, reject });
+      try {
+        this.worker.postMessage({
+          type: 'validate-placement',
+          requestId,
+          input: {
+            objectType,
+            x: target.x,
+            z: target.z,
+            elevationMm: target.elevationMm,
+            rotation: target.rotation,
+          },
+        });
+      } catch (error: unknown) {
+        this.pendingPlacements.delete(requestId);
+        reject(asError(error));
+      }
+    });
+  }
+
+  /** Queries Rust and updates the renderer's presentation-only preview. */
+  public async previewPlacement(target: PlacementTarget): Promise<PlacementValidation> {
+    this.assertPlacementTarget(target);
+    const pending: PlacementPreview = {
+      ...target,
+      valid: false,
+      occupiedCellCount: 0,
+      pending: true,
+    };
+    this.applyPlacementPreview(pending);
+    const result = await this.validatePlacement(target);
+    const current = this.placementPreview;
+    if (current !== undefined && this.placementKey(current) === this.placementKey(target)) {
+      this.applyPlacementPreview({ ...result, pending: false });
+    }
+    return result;
+  }
+
+  /** Clears the current presentation-only placement preview. */
+  public clearPlacementPreview(): void {
+    this.applyPlacementPreview(undefined);
+  }
+
+  private applyPlacementPreview(preview: PlacementPreview | undefined): void {
+    this.placementPreview = preview;
+    this.renderer.setPlacementPreview?.(preview);
+    this.notifyDiagnostics();
+  }
+
+  /** Schedules an authoritative placement for the next unstarted tick. */
+  public placeObject(target: PlacementTarget, exactTicks = 1): Promise<CommandResultResponse> {
+    this.assertPlacementTarget(target);
+    const objectType = this.resolvePlacementHandle(target.objectType, 'command');
+    if (objectType instanceof Error) {
+      return Promise.reject(objectType);
+    }
+    const ids = this.allocateCommandIds();
+    return this.submitCommand(
+      encodeSpawnCommandBatch({
+        batchSequence: ids.batchSequence,
+        clientSequence: ids.clientSequence,
+        objectType,
+        x: target.x,
+        z: target.z,
+        elevationMm: target.elevationMm,
+        rotation: target.rotation,
+      }),
+      exactTicks,
+    );
+  }
+
+  /** Schedules an authoritative move for the next unstarted tick. */
+  public moveObject(
+    entityId: EntityId,
+    target: EntityTransformTarget,
+    exactTicks = 1,
+  ): Promise<CommandResultResponse> {
+    this.assertTransformTarget(target);
+    const command = this.prepareEntityCommand(entityId);
+    if (command instanceof Error) {
+      return Promise.reject(command);
+    }
+    return this.submitCommand(
+      encodeMoveCommandBatch({
+        batchSequence: command.ids.batchSequence,
+        clientSequence: command.ids.clientSequence,
+        slot: command.entity.slot,
+        generation: command.entity.generation,
+        x: target.x,
+        z: target.z,
+        elevationMm: target.elevationMm,
+        rotation: target.rotation,
+      }),
+      exactTicks,
+    );
+  }
+
+  /** Schedules an authoritative removal for the next unstarted tick. */
+  public removeEntity(entityId: EntityId, exactTicks = 1): Promise<CommandResultResponse> {
+    const command = this.prepareEntityCommand(entityId);
+    if (command instanceof Error) {
+      return Promise.reject(command);
+    }
+    return this.submitCommand(
+      encodeRemoveCommandBatch({
+        batchSequence: command.ids.batchSequence,
+        clientSequence: command.ids.clientSequence,
+        slot: command.entity.slot,
+        generation: command.entity.generation,
+      }),
+      exactTicks,
+    );
   }
 
   public submitCommand(
@@ -375,50 +630,80 @@ export class FoundationRuntime {
     if (this.currentState === 'disposed') {
       return;
     }
-    if (response.type === 'startup-ready') {
-      this.workerReady = true;
-      this.simulationTick = BigInt(response.tick);
-      this.latestMetrics = response.metrics;
-      this.currentState = 'ready';
-      const ready: FoundationReady = {
-        protocolVersion: response.protocolVersion,
-        adapterVersion: response.adapterVersion,
-        tick: response.tick,
-        metrics: response.metrics,
-      };
-      if (!this.readySettled) {
-        this.readySettled = true;
-        this.resolveReady(ready);
+    this.responseHandlers[response.type](response);
+  }
+
+  private handleStartupReady(response: Extract<WorkerResponse, { type: 'startup-ready' }>): void {
+    this.workerReady = true;
+    this.simulationTick = BigInt(response.tick);
+    this.latestMetrics = response.metrics;
+    this.objectTypeHandles.clear();
+    for (const entry of response.objectTypeHandles) {
+      this.objectTypeHandles.set(entry.id, entry.handle);
+    }
+    this.currentState = 'ready';
+    const ready: FoundationReady = {
+      protocolVersion: response.protocolVersion,
+      adapterVersion: response.adapterVersion,
+      tick: response.tick,
+      objectTypeHandles: response.objectTypeHandles,
+      metrics: response.metrics,
+    };
+    if (!this.readySettled) {
+      this.readySettled = true;
+      this.resolveReady(ready);
+    }
+    this.notifyDiagnostics();
+  }
+
+  private handleCommandResult(response: Extract<WorkerResponse, { type: 'command-result' }>): void {
+    this.simulationTick = BigInt(response.tick);
+    this.lastStateHashHex = response.stateHashHex;
+    this.latestMetrics = response.metrics;
+    this.lastError = undefined;
+    this.pendingCommands.get(response.requestId)?.resolve(response);
+    this.pendingCommands.delete(response.requestId);
+    this.notifyDiagnostics();
+  }
+
+  private handleMetrics(response: Extract<WorkerResponse, { type: 'metrics' }>): void {
+    this.latestMetrics = response.metrics;
+    this.pendingMetrics.get(response.requestId)?.resolve(response.metrics);
+    this.pendingMetrics.delete(response.requestId);
+    this.notifyDiagnostics();
+  }
+
+  private handlePlacementValidation(response: PlacementValidationResponseMessage): void {
+    this.latestMetrics = response.metrics;
+    const objectType = [...this.objectTypeHandles.entries()].find(
+      ([, handle]) => handle === response.result.objectType,
+    )?.[0];
+    const pending = this.pendingPlacements.get(response.requestId);
+    if (pending === undefined || objectType === undefined) {
+      this.pendingPlacements.delete(response.requestId);
+      if (objectType === undefined) {
+        this.transitionFatal(
+          'placement_object_type_unknown',
+          'Worker returned a placement handle that was not registered at startup',
+          'fatal',
+        );
       }
-      this.notifyDiagnostics();
       return;
     }
-    if (response.type === 'command-result') {
-      this.simulationTick = BigInt(response.tick);
-      this.lastStateHashHex = response.stateHashHex;
-      this.latestMetrics = response.metrics;
-      this.lastError = undefined;
-      this.pendingCommands.get(response.requestId)?.resolve(response);
-      this.pendingCommands.delete(response.requestId);
-      this.notifyDiagnostics();
-      return;
-    }
-    if (response.type === 'event-batch') {
-      this.handleEventBatch(response);
-      return;
-    }
-    if (response.type === 'render-snapshot') {
-      this.handleRenderSnapshot(response);
-      return;
-    }
-    if (response.type === 'metrics') {
-      this.latestMetrics = response.metrics;
-      this.pendingMetrics.get(response.requestId)?.resolve(response.metrics);
-      this.pendingMetrics.delete(response.requestId);
-      this.notifyDiagnostics();
-      return;
-    }
-    this.handleWorkerError(response);
+    pending.resolve({
+      objectType,
+      x: response.result.x,
+      z: response.result.z,
+      elevationMm: response.result.elevationMm,
+      rotation: response.result.rotation,
+      valid: response.result.valid,
+      ...(response.result.rejectionCode === undefined
+        ? {}
+        : { rejectionCode: response.result.rejectionCode }),
+      occupiedCellCount: response.result.occupiedCellCount,
+    });
+    this.pendingPlacements.delete(response.requestId);
+    this.notifyDiagnostics();
   }
 
   private handleEventBatch(response: Extract<WorkerResponse, { type: 'event-batch' }>): void {
@@ -505,6 +790,8 @@ export class FoundationRuntime {
     if (response.requestId !== undefined) {
       this.pendingCommands.get(response.requestId)?.reject(error);
       this.pendingCommands.delete(response.requestId);
+      this.pendingPlacements.get(response.requestId)?.reject(error);
+      this.pendingPlacements.delete(response.requestId);
       this.pendingMetrics.get(response.requestId)?.reject(error);
       this.pendingMetrics.delete(response.requestId);
     }
@@ -541,8 +828,12 @@ export class FoundationRuntime {
     for (const pending of this.pendingMetrics.values()) {
       pending.reject(error);
     }
+    for (const pending of this.pendingPlacements.values()) {
+      pending.reject(error);
+    }
     this.pendingCommands.clear();
     this.pendingMetrics.clear();
+    this.pendingPlacements.clear();
   }
 
   private detachWorker(): void {
@@ -556,6 +847,57 @@ export class FoundationRuntime {
     }
     this.workerTerminated = true;
     this.worker.terminate();
+  }
+
+  private assertPlacementTarget(target: PlacementTarget): void {
+    assertPublicId(target.objectType, 'object_type');
+    this.assertTransformTarget(target);
+  }
+
+  private assertTransformTarget(target: EntityTransformTarget): void {
+    assertI32Value(target.x, 'x');
+    assertI32Value(target.z, 'z');
+    assertI32Value(target.elevationMm, 'elevation_mm');
+    if (!Number.isInteger(target.rotation) || target.rotation < 0 || target.rotation > 3) {
+      throw new Error('tessera:placement:invalid_rotation:rotation must be in the range 0..3');
+    }
+  }
+
+  private resolvePlacementHandle(id: string, phase: 'placement' | 'command'): number | Error {
+    if (this.currentState !== 'ready') {
+      return new Error(`tessera:${phase}:not_ready:runtime is ${this.currentState}`);
+    }
+    const handle = this.objectTypeHandles.get(id);
+    return handle === undefined ? new Error(`tessera:${phase}:unknown_object_type:${id}`) : handle;
+  }
+
+  private prepareEntityCommand(entityId: EntityId): EntityCommand | Error {
+    const entity = parseEntityId(entityId);
+    if (entity === undefined) {
+      return new Error(`tessera:command:invalid_entity_id:${entityId}`);
+    }
+    if (this.currentState !== 'ready') {
+      return new Error(`tessera:command:not_ready:runtime is ${this.currentState}`);
+    }
+    return { entity, ids: this.allocateCommandIds() };
+  }
+
+  private allocateCommandIds(): {
+    readonly clientSequence: bigint;
+    readonly batchSequence: bigint;
+  } {
+    const clientSequence = this.nextClientSequence;
+    const batchSequence = this.nextBatchSequence;
+    if (clientSequence === 0xffff_ffff_ffff_ffffn || batchSequence === 0xffff_ffff_ffff_ffffn) {
+      throw new Error('tessera:command:sequence_exhausted:command sequence space is exhausted');
+    }
+    this.nextClientSequence += 1n;
+    this.nextBatchSequence += 1n;
+    return { clientSequence, batchSequence };
+  }
+
+  private placementKey(target: PlacementTarget): string {
+    return `${target.objectType}:${target.x}:${target.z}:${target.elevationMm}:${target.rotation}`;
   }
 
   private allocateRequestId(): number {

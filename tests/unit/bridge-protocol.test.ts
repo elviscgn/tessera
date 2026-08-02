@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   bytesToHex,
   decodeCommandResponse,
+  decodePlacementValidation,
+  encodeMoveCommandBatch,
+  encodeRemoveCommandBatch,
   encodeSpawnCommandBatch,
   parseWasmError,
   RESPONSE_LENGTH,
@@ -48,6 +51,64 @@ describe('Milestone 2A Worker bridge codec', () => {
     expect(bytesToHex(response.stateHash)).toBe(
       '1d58e8e0cf937e92279a5206ca3d4e8d24b046b9545568695bc262dd0ed4967c',
     );
+  });
+
+  it('encodes move and remove records with their complete payloads', () => {
+    const move = new Uint8Array(
+      encodeMoveCommandBatch({
+        batchSequence: 2n,
+        clientSequence: 3n,
+        slot: 4,
+        generation: 5,
+        x: -2,
+        z: 8,
+        elevationMm: 250,
+        rotation: 3,
+      }),
+    );
+    expect(move.byteLength).toBe(65);
+    expect(new DataView(move.buffer).getUint16(28, true)).toBe(3);
+    expect(new DataView(move.buffer).getUint32(44, true)).toBe(4);
+    expect(new DataView(move.buffer).getUint32(48, true)).toBe(5);
+    expect(new DataView(move.buffer).getInt32(52, true)).toBe(-2);
+
+    const remove = new Uint8Array(
+      encodeRemoveCommandBatch({
+        batchSequence: 4n,
+        clientSequence: 5n,
+        slot: 4,
+        generation: 6,
+      }),
+    );
+    expect(remove.byteLength).toBe(52);
+    expect(new DataView(remove.buffer).getUint16(28, true)).toBe(4);
+    expect(new DataView(remove.buffer).getUint32(44, true)).toBe(4);
+    expect(new DataView(remove.buffer).getUint32(48, true)).toBe(6);
+  });
+
+  it('decodes an authoritative placement response and preserves rejection codes', () => {
+    const bytes = new Uint8Array(40);
+    bytes.set([84, 83, 80, 76, 67, 48, 48, 49]);
+    const view = new DataView(bytes.buffer);
+    view.setUint16(8, 1, true);
+    view.setUint32(12, 40, true);
+    view.setUint32(16, 2, true);
+    view.setInt32(20, -1, true);
+    view.setInt32(24, 3, true);
+    view.setInt32(28, 250, true);
+    view.setUint8(32, 1);
+    view.setUint8(33, 0);
+    view.setUint8(34, 7);
+    const result = decodePlacementValidation(bytes);
+    expect(result).toMatchObject({
+      objectType: 2,
+      x: -1,
+      z: 3,
+      elevationMm: 250,
+      rotation: 1,
+      valid: false,
+      rejectionCode: 7,
+    });
   });
 
   it('turns adapter failures into structured Worker errors', () => {
