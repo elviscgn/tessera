@@ -1,27 +1,84 @@
 # Architecture
 
-Tessera has one authority boundary: Rust owns authoritative simulation state and gameplay-affecting behavior. TypeScript hosts browser lifecycle, Worker ownership, input translation, persistence adapters, and public presentation APIs. Babylon is a disposable renderer and never becomes a second simulation world.
+Tessera has one important rule: Rust owns the simulation. The browser hosts the runtime and presents its results, but it never becomes a second game state.
 
-The planned runtime is a single-threaded Rust/Wasm instance inside a dedicated Worker. Packed commands, events, and render snapshots cross the Worker boundary in coarse batches. The first transport uses transferable buffers; shared memory is a later, explicitly gated option.
+## Runtime at a glance
 
-Milestones 0 and 1 established the repository and native authority boundary. Milestone 2A proved the coarse native/Wasm/Worker control path. Milestone 2B added the packed render/event data plane, memory-growth recovery, transferable-buffer ownership, reliable event delivery, and parity fixtures. Milestone 3 now owns Babylon lifecycle and readiness; camera, picking, and entity-to-visual reconciliation remain later milestones. The four Rust crates are `tessera-core`, `tessera-protocol`, `tessera-wasm`, and `tessera-cli`. `tessera-core` does not depend on the protocol or browser bindings; `tessera-protocol` is the browser-independent codec shared by the adapter, CLI, replay tools, and contract tests.
+```text
+consumer or Scenario Lab
+        │ public TypeScript API
+        ▼
+browser main thread ── transferable buffers ── simulation Worker
+        │                                           │
+        │ Babylon.js, input, UI                     │ wasm-bindgen
+        ▼                                           ▼
+presentation state                             Rust simulation
+                                                    │
+                                                    ▼
+                                             native CLI and tests
+```
 
-The native kernel uses a generational arena with `(slot: u32, generation: u32)` identities, normalized component stores for object handles and integer grid transforms, and deterministic lowest-slot reuse. A scenario has an immutable 20 Hz configuration and a versioned 32-byte ChaCha8 seed. Commands carry client sequence numbers, are assigned to the next unstarted tick, and execute in `(scheduled tick, sequence, batch order)` order. Invalid and duplicate commands consume their sequence and emit deterministic rejection events without mutating entities.
+The main thread owns the canvas, renderer, input, public lifecycle, persistence adapters, and presentation state. The Worker owns the Wasm instance, clock, command intake, tick driving, render publication, and Worker errors. Rust owns simulation state and rules.
 
-Meaningful state is encoded explicitly as little-endian fields with a domain prefix and version before BLAKE3 hashing. The encoding includes scheduler, entity, seed, RNG draw-count, and pending-command state; it never hashes Rust memory layout, event-log storage, or JSON. Native replay uses the assigned tick and sequence records to reproduce checkpoint hashes without a browser.
+Babylon.js is deliberately disposable. It can be stopped and rebuilt from a complete render snapshot without changing a tick, command result, event sequence, or state hash.
 
-## Milestone 2A boundary
+## Rust workspace
 
-The first browser boundary is deliberately small. `tessera-protocol` encodes command batches as a little-endian 28-byte header followed by validated TLV records, and encodes successful results as a fixed 64-byte response containing the batch sequence, tick, and canonical state hash. The decoder checks magic, version, flags, lengths, record counts, opcodes, payload sizes, integer fields, and quarter-turn values before allocating commands or mutating `Simulation`. Unknown required opcodes and malformed lengths fail closed with a stable error code and byte offset.
+The workspace has four crates from the beginning:
 
-`tessera-wasm` is a thin adapter around one `Simulation`. It accepts an exactly 32-byte seed, accepts at most five exact ticks per call, schedules decoded commands in Rust, and returns the fixed response. Adapter failures use `tessera:<phase>:<code>:<message>` strings; the Worker translates them into structured startup, command, or fatal messages. Native tests and the browser-visible Scenario Lab probe use the same seed (`[7; 32]`), spawn command, and one tick. Their checkpoint hash is `24ebdfb8bf10251c184a2bcd57d48a6b7d77be51114fbcf75847f77f32adb104`.
+- `tessera-core` contains the browser-independent simulation;
+- `tessera-protocol` contains the shared wire formats and validators;
+- `tessera-wasm` is the narrow Rust/JavaScript adapter;
+- `tessera-cli` runs scenarios, replays, checksums, and diagnostics natively.
 
-The Worker imports the wasm-pack `--target web` module and explicitly awaits its initializer before constructing `TesseraWasm`; no bundler-target implicit initialization is used. The generated module under `src/worker/wasm` is a checked-in application input, regenerated only by the pinned `scripts/build-wasm.mjs` command. Command responses, event batches, and render snapshots are copied into exclusively owned transferable buffers before posting to the main thread. Render snapshots use a fixed 64-byte header and nine hybrid structure-of-arrays regions: slot and generation IDs, integer millimetre positions, presentation quaternions, scales, visual handles, flags, and animation fields. The Worker validates every region, capacity, interval, and total length before publication. Rust writes the snapshot into its Wasm-owned back buffer and returns a 32-byte descriptor; the Worker checks pointer and capacity against the current `WebAssembly.Memory` and recreates host views whenever `memory.buffer` identity or length changes. The copied header is patched with the Worker memory generation so a renderer can reject stale data.
+`tessera-core` does not depend on the protocol crate, browser bindings, Babylon.js, React, or browser storage. The protocol crate is intentionally independent of the browser so the Wasm adapter, CLI, replay tools, and contract tests use the same definitions.
 
-The render transport starts with a three-slot, power-of-two rotating buffer pool. A slot is owned by the main thread after transfer and is reusable only after an explicit return message. Pool exhaustion drops the visual publication, increments backpressure metrics, and never pauses or changes simulation advancement. Event batches use a 48-byte little-endian header plus fixed-size records. The Rust event log remains authoritative; batches carry first/last sequence numbers and an acknowledgement floor. The main-thread receiver accepts only contiguous sequences, never acknowledges across a gap, requests a snapshot plus retransmission from its last checkpoint, and deduplicates old batches. Boundary metrics expose command/event bytes and calls, event continuity and resyncs, render publication and drops, pool ownership, memory generations, and view recreations.
+The core uses a generational arena and parallel component stores. An entity is `(slot: u32, generation: u32)`, and renderer mappings reject a stale generation. Active slots are visited in a stable order. This keeps mutation straightforward while making replay, serialization, and native/Wasm comparison explicit.
 
-## Milestone 3 lifecycle foundation
+## Authority and determinism
 
-`FoundationRuntime` is the lifecycle owner for one Babylon renderer and one simulation Worker. It creates the renderer before starting the Worker, awaits the Worker `startup-ready` response through a `ready` promise, routes command/event/render messages, validates and synchronously consumes each packed snapshot, returns its transferable buffer, and exposes structured diagnostics. A fatal Worker, protocol, or renderer-boundary error transitions the runtime to `fatal`, rejects pending requests, detaches listeners, terminates the Worker, and disposes Babylon resources. `dispose()` is idempotent and performs the same ownership cleanup when called explicitly or from Scenario Lab `pagehide`.
+The simulation runs at a fixed 20 Hz. Rust advances ticks; the browser only requests commands, pause/resume, exact steps, or a speed setting. Live commands carry monotonic client sequences and are scheduled for the next unstarted tick. Ordering is `(scheduled tick, client sequence, batch order)`.
 
-`BabylonRenderer` imports modular `@babylonjs/core` modules and registers the glTF loader through a side-effect-only loader module. It creates a WebGL engine, right-handed scene, temporary free camera, hemispheric light, and one non-pickable box placeholder. Babylon owns the render loop and resize listener; the runtime records render-frame count and the last validated snapshot metadata but does not yet create per-entity visual mappings. The public foundation entry point exports lifecycle/readiness types only; declarative scenarios, camera controls, selection, and gameplay APIs remain future milestones.
+Authoritative placement values use signed integer grid coordinates, millimetre elevation, integer footprints, and four quarter-turn rotations. Randomness uses ChaCha8 with a versioned 32-byte seed. Meaningful state is encoded field by field in a canonical little-endian stream and hashed with BLAKE3. Rust memory layout, JSON formatting, Babylon objects, render timing, and diagnostics are not part of the hash.
+
+Invalid and duplicate commands consume their sequence, produce deterministic rejection events, and leave the simulation unchanged. Native replay records the assigned tick and sequence so the same command log can be compared with the Wasm run.
+
+## Worker boundary
+
+The Worker explicitly initializes the `wasm-pack --target web` module, creates one Rust instance, and keeps the browser clock separate from tick semantics. Normal real-time work is bounded; excessive wall-clock debt is discarded and reported instead of being converted into an unbounded catch-up.
+
+Small control messages are versioned requests and responses. Larger traffic uses packed little-endian buffers:
+
+- command batches contain a magic value, protocol version, batch sequence, record count, total length, and TLV records;
+- event batches contain fixed-size records and contiguous sequence metadata; the main thread acknowledges only the highest contiguous event;
+- render snapshots contain a fixed header and a region table followed by structure-of-arrays data.
+
+Unknown required fields, unsupported flags, malformed lengths, and overlapping regions are rejected before allocation, rendering, or mutation. The event stream is reliable and may request retransmission. Render snapshots are latest-wins and may be dropped under pressure; dropping one never drops a command, tick, or authoritative event.
+
+Wasm memory growth invalidates existing JavaScript views. The Worker compares the memory buffer identity and length on every descriptor read, recreates its views when either changes, increments a memory generation, and copies a complete snapshot into an exclusively owned transferable buffer.
+
+The initial render pool has three reusable buffers with power-of-two capacities. The main thread returns a buffer after it is no longer in use. If all buffers are in flight, the Worker records backpressure and skips visual publication while simulation continues.
+
+## Renderer
+
+Babylon imports are modular, with the glTF loader registered separately. The scene is right-handed and follows glTF conventions: `+X` east, `+Y` up, `+Z` south, and one Babylon unit per metre. Asset pivots are bottom-centred. Camera and footprint rotations are four clockwise quarter-turns.
+
+The renderer owns the engine, scene, camera, lights, materials, meshes, observers, resize listener, and render loop. It records render frames and the last validated snapshot metadata, but it does not own authoritative entities. Later synchronization work will reconcile visual records by slot and generation; a Babylon mesh will never be used to infer gameplay state.
+
+The project starts with ordinary Babylon instances because they support per-instance transforms and picking. Thin instances remain a measured performance experiment, not a default.
+
+## Current implementation
+
+Milestone 3 provides the lifecycle foundation:
+
+- `FoundationRuntime` owns one Worker, one renderer, listeners, pending requests, readiness, diagnostics, and disposal;
+- `BabylonRenderer` creates a WebGL2 engine, right-handed scene, temporary camera, light, and one non-pickable placeholder box;
+- packed event and render messages are validated before the renderer sees them;
+- fatal startup, protocol, Worker, and renderer errors close the runtime and reject pending work;
+- `dispose()` is idempotent, including the Scenario Lab `pagehide` path.
+
+The public entry point currently exposes lifecycle and readiness primitives only. Camera controls, grid placement, picking, entity-to-visual reconciliation, persistence, the development test bridge, and the consumer-facing scenario API are added in later milestones.
+
+## Deliberate exclusions
+
+The first release does not include Ustawi gameplay, networking, physics, mobile/touch input, arbitrary executable scenarios, shared-memory transport, WebGPU requirements, or a consumer-owned Rust plugin ABI. Those choices are recorded in the [architecture and delivery plan](../PLAN.md) and revisited only when measured evidence or a real consumer need justifies them.

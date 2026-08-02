@@ -1,62 +1,69 @@
 # Testing
 
-Milestones 0 and 1 tests prove reproducible foundations and native authority:
+Tessera tests the same scenario at several levels: native Rust, the Wasm adapter, the Worker boundary, and the browser view. The goal is to prove state and protocol behaviour first, then use visual checks where appearance is the thing being tested.
 
-- Prettier and rustfmt check formatting.
-- ESLint and strict TypeScript check source boundaries.
-- Cargo Clippy and native Cargo tests check all four crates.
-- The pinned `wasm-pack --target web` build regenerates the checked-in Worker module and Wasm asset.
-- Vitest checks committed tool and repository metadata.
-- Vite production build smoke checks the Scenario Lab shell and dedicated Worker bundle.
+## Everyday commands
 
-Milestone 1 adds native deterministic-kernel coverage in `tessera-core`:
+Use the smallest command that answers the question while developing:
 
-- Generational IDs reject stale handles and reuse slots with incremented generations.
-- Fixed ticks schedule commands for the next unstarted tick and apply the declared ordering.
-- Zero, duplicate, and non-monotonic sequences are consumed and rejected without entity mutation.
-- ChaCha8 reference vectors and same-seed random commands are stable.
-- Canonical BLAKE3 hashes are unchanged by event-log draining and differ when meaningful state changes.
-- Replay records reproduce hashes across idle ticks and reject descending assigned ticks.
-
-Run the focused native checkpoint with:
-
-```text
-cargo test --manifest-path rust/Cargo.toml -p tessera-core --all-targets
-cargo clippy --manifest-path rust/Cargo.toml -p tessera-core --all-targets -- -D warnings
-```
-
-Milestone 2A adds the coarse authority-boundary checks:
-
-- Rust protocol tests round-trip little-endian command TLVs, reject malformed totals, reject required flags and unknown opcodes, and verify the fixed response layout.
-- The native Wasm adapter test submits the same spawn batch used by the browser probe, advances one tick, and checks the canonical response hash. The adapter also tests the five-tick per-call bound.
-- Vitest checks the TypeScript command encoder, fixed response decoder, and structured Wasm error parser.
-- The generated web-target module is loaded by the dedicated Worker in the Scenario Lab probe. A successful browser-visible probe reaches tick 1 with state hash `24ebdfb8bf10251c184a2bcd57d48a6b7d77be51114fbcf75847f77f32adb104`.
-
-Run the focused 2A checks with:
-
-```text
+```sh
 pnpm test
+pnpm typecheck
 cargo test --manifest-path rust/Cargo.toml --workspace --all-targets
-pnpm check:wasm
-pnpm build
 ```
 
-Milestone 2B adds the data-plane and ownership checks:
+Before committing a coherent change, run the complete gate:
 
-- Rust protocol tests verify the fixed render header and region table, renderer-neutral SoA payloads, fixed event record sizes, all event variants, contiguous sequence metadata, and rejection of sequence gaps.
-- TypeScript data-plane validation rejects malformed magic, versions, lengths, region capacities, table overlaps, interval overlaps, unsupported scalar types, event gaps, and trailing bytes before a renderer or acknowledgement sees them.
-- The three-slot transferable pool tests power-of-two capacity reuse, in-flight ownership, safe exhaustion drops, and invalid returns. `MemoryViewTracker` tests confirm that a `WebAssembly.Memory.grow()` changes the buffer identity and increments the view generation exactly once.
-- The generated web-target Wasm parity test compares the native probe hash, decodes the packed snapshot and event batch, acknowledges the event checkpoint, grows Wasm memory, and decodes a fresh snapshot from recreated views.
-- The Scenario Lab Worker probe exposes readiness, packed event/render metadata, ACK progress, memory-generation counters, and dropped-snapshot metrics as `data-tessera-*` attributes. A browser smoke run is required before the milestone is accepted.
+```sh
+pnpm check
+```
 
-Milestone 3 adds lifecycle and renderer-foundation checks:
+`pnpm check` runs formatting, linting, strict TypeScript, Vitest, Rust Clippy/tests, the reproducible Wasm build, and the Vite production build.
 
-- Vitest fakes the Worker and renderer to verify readiness resolution, command routing, snapshot validation/return, metrics requests, fatal startup cleanup, and repeated create-ready-dispose cycles.
-- The production build includes modular Babylon core imports and the glTF loader registration while keeping the Rust Worker as the only authority.
-- The Scenario Lab browser smoke verifies the Babylon canvas, placeholder scene, active render loop, Worker probe, packed snapshot synchronization, and `pagehide` disposal path. Structured attributes expose render-frame and renderer-snapshot counts alongside the existing boundary metrics.
+## Native simulation
 
-The foundation still has no camera controls, picking, entity-to-mesh mapping, test bridge, persistence, or gameplay APIs; those remain gated by later milestones.
+The Rust suite covers the rules that must be identical in native and browser runs:
 
-Run the aggregate `pnpm check` from the repository root after the pinned dependencies are installed. It expands to `pnpm check:format`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm check:rust`, `pnpm check:wasm`, and `pnpm build`. The generated Wasm module is a checked-in application input; inspect its regenerated diff and the staged file list before committing. Milestones 0–3 do not install Playwright, compare visuals, test gameplay, or add a test bridge.
+- fixed-tick scheduling and command ordering;
+- invalid, duplicate, and non-monotonic client sequences;
+- generational IDs and stale-handle rejection;
+- ChaCha8 reference vectors and seeded random commands;
+- canonical BLAKE3 hashes;
+- replay across idle ticks and rejected replay order;
+- grid, occupancy, footprints, serialization, migration, and invariants as those systems land.
 
-Later milestones add camera/grid/selection behavior, protocol fixtures, Worker boundary tests, Playwright flows, Chromium visuals, Firefox/WebKit smoke coverage, performance harnesses, lifecycle checks, and an isolated external consumer. Those checks are intentionally outside this lifecycle checkpoint.
+The protocol crate also tests little-endian command/event/render records, lengths, flags, opcodes, region descriptors, and contiguous event sequences.
+
+## Wasm and Worker boundary
+
+The Wasm adapter uses the same command batch as the native probe and compares checkpoint hashes. TypeScript tests cover command encoding, response decoding, structured errors, packed render/event validation, buffer ownership, and memory-view recreation after `WebAssembly.Memory.grow()`.
+
+The Worker checks that:
+
+- the web-target Wasm module is initialized explicitly;
+- at most the configured number of exact ticks runs in one call;
+- malformed data is rejected before rendering or mutation;
+- render buffers are copied into owned transferable storage;
+- pool exhaustion drops only visual snapshots;
+- event acknowledgements never skip a sequence;
+- a changed Wasm memory buffer recreates all host views.
+
+## Browser checks
+
+The Scenario Lab is the first browser smoke target. At the current lifecycle milestone it checks the canvas, Babylon scene, render loop, Worker readiness, packed snapshot delivery, event acknowledgement, memory-generation diagnostics, and disposal on `pagehide`.
+
+The probe uses structured `data-tessera-*` attributes so browser tests can assert ticks, hashes, sequence numbers, buffer ownership, and render generations without relying on timing or pixels alone. The known native/Wasm probe hash is:
+
+```text
+24ebdfb8bf10251c184a2bcd57d48a6b7d77be51114fbcf75847f77f32adb104
+```
+
+Camera, grid, selection, placement, save/load, visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
+
+## Visual tests
+
+The visual museum is intentionally small. A canonical Chromium run fixes the browser revision, viewport, device-pixel ratio, camera, seed, tick, render generation, animation time, fonts, graphics backend, and quality settings. A baseline update needs a reason, before/after artifacts, and unchanged structured state assertions.
+
+## Test discipline
+
+Prefer deterministic fixtures and explicit readiness or tick waits. Do not replace a failing assertion with a sleep, silently update a baseline, disable strict checks, or delete coverage to make a build green. If a failure points to an architectural decision, document the decision rather than hiding the symptom.

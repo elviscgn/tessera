@@ -1,9 +1,51 @@
 # Contributing
 
-Read `PLAN.md`, `AGENTS.md`, and the active local `CURRENT_TASK.md` before editing. Work from the repository root and keep the exact tool versions and committed lockfiles intact.
+Tessera is being built in small, reviewable increments. The most useful contribution is a focused change that explains its purpose, respects the Rust/browser boundary, and leaves the repository easy to run.
 
-Milestone work is sequential. Implement one checkpoint, run its exact verification, inspect the diff, stage only that checkpoint's files, and make one focused commit. Do not begin the next checkpoint automatically, push, or change unrelated files. If the same failure signature remains after three correction attempts, stop and report the command, evidence, and affected diff.
+## Before you change code
 
-The Rust core is the future authority for simulation. Browser code may host lifecycle and presentation concerns, but it must not invent authoritative state. New dependencies, public entry points, architecture changes, and test exceptions require evidence and an explicit plan update.
+Start at the repository root and check the current milestone in [PLAN.md](../PLAN.md) and [ROADMAP.md](ROADMAP.md). If a change affects the public API, protocol, crate boundaries, or ownership model, record the decision before implementation rather than letting it emerge accidentally in code.
 
-The repository's initial control documents are local-only. Keep `PLAN.md`, `AGENTS.md`, and `CURRENT_TASK.md` excluded, unchanged, unstaged, and uncommitted.
+Keep the pinned tool versions and both lockfiles intact. Generated Wasm output is a build artifact; regenerate it with the repository script instead of editing it by hand.
+
+## Development workflow
+
+1. Choose one small piece of work and state what “done” means.
+2. Make the smallest coherent change. Keep unrelated cleanup in a separate change.
+3. Add or update deterministic tests with the implementation.
+4. Run the checks that cover the change, then run `pnpm check` before asking for review.
+5. Review the diff, including generated files and package contents, before committing.
+
+Use a short commit subject in the imperative mood, for example `add camera coordinate helpers` or `tighten snapshot validation`.
+
+## Design boundaries
+
+- Rust owns authoritative simulation state and gameplay-affecting behaviour.
+- TypeScript owns browser lifecycle, Worker communication, input translation, persistence adapters, and presentation state.
+- Babylon.js is a replaceable renderer. A mesh must never become the source of truth for entity existence or gameplay.
+- Commands and events cross the Worker boundary in versioned batches. Do not add per-entity calls or JSON to a hot path.
+- Public consumers use declared entry points. Do not import internal files from examples or tests that represent consumer behaviour.
+
+New dependencies need a clear reason, a licence check, and an explanation of their runtime or build impact. New public exports need tests and documentation. If a proposed change conflicts with the architecture, pause and write down the trade-off before proceeding.
+
+## Verification
+
+The standard repository gate is:
+
+```sh
+pnpm check
+```
+
+For a narrower change, use the focused commands in [TESTING.md](TESTING.md). Tests should assert state, hashes, protocol records, and diagnostics wherever possible. Screenshots are useful for visual work, but they should not be the only proof of behaviour.
+
+## Pull requests
+
+A useful pull request says:
+
+- what changed and why;
+- which milestone or design decision it belongs to;
+- which commands were run and whether they passed;
+- what remains deliberately out of scope;
+- any follow-up work or risks.
+
+Keep the implementation and its documentation in the same change when the public behaviour or developer workflow changes.

@@ -1,30 +1,65 @@
 # Local setup
 
-Milestone 3 uses exact tool versions. Select Node 24.18.1 with a version manager that reads `.node-version`; do not substitute the host Node version.
+The repository is pinned so a native run, a Wasm run, and CI use the same toolchain. Use Node 24.18.1 and pnpm 11.19.0 for JavaScript work. Rust 1.97.1 and the `wasm32-unknown-unknown` target are required for the simulation and Worker build.
+
+## JavaScript tools
+
+Use a version manager that reads `.node-version`, or select the version manually:
 
 ```sh
-node --version
+node --version       # 24.18.1
 corepack enable
 corepack prepare pnpm@11.19.0 --activate
-pnpm --version
+pnpm --version       # 11.19.0
 pnpm install --frozen-lockfile
 ```
 
-Install the pinned Rust toolchain and Wasm target:
+## Rust and Wasm
+
+Install the pinned toolchain with the components used by the repository checks:
 
 ```sh
-rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+rustup toolchain install 1.97.1 \
+  --profile minimal \
+  --component rustfmt \
+  --component clippy \
+  --target wasm32-unknown-unknown
+
+rustup default 1.97.1
 rustc --version
 rustup target list --installed
+```
+
+Install the pinned `wasm-pack` in the repository-local tools directory:
+
+```sh
 cargo install wasm-pack --version 0.15.0 --locked --root .tools/wasm-pack-0.15.0
 .tools/wasm-pack-0.15.0/bin/wasm-pack --version
 ```
 
-Verify the JavaScript tools and run the foundation gate:
+## Run the project
+
+From the repository root:
 
 ```sh
 pnpm tool:versions
 pnpm check
+pnpm dev
 ```
 
-`pnpm check` runs formatting, ESLint, strict TypeScript, Vitest, native Rust checks, the pinned `wasm-pack --target web` build, and the Vite production build. Babylon core/loaders are pinned runtime dependencies for the lifecycle milestone; Playwright and React remain out of the package. The generated Worker module under `src/worker/wasm` is checked in because it is an application build input; `pnpm check:wasm` regenerates it and the diff must remain reproducible. Keep `pnpm-lock.yaml` and `rust/Cargo.lock` committed and use `pnpm install --frozen-lockfile` in clean environments.
+Open the Scenario Lab at the local URL printed by Vite. The development page runs the Rust/Wasm probe, shows the Babylon foundation scene, and exposes its current diagnostics in the page markup for browser checks.
+
+## What `pnpm check` does
+
+The repository gate runs, in order:
+
+- Prettier and rustfmt;
+- ESLint and strict TypeScript checks;
+- Vitest;
+- Rust Clippy and the complete Rust test suite;
+- the pinned `wasm-pack --target web` build;
+- the Vite production build.
+
+The generated Worker module under `src/worker/wasm` is checked in because it is an application input. Rebuild it with `pnpm check:wasm`; if the output changes, inspect the diff before committing.
+
+Keep `pnpm-lock.yaml` and `rust/Cargo.lock` committed. Clean environments should use `pnpm install --frozen-lockfile` so dependency resolution does not drift.

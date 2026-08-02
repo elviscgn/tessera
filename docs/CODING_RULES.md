@@ -1,13 +1,38 @@
 # Coding rules
 
-- Keep gameplay authority in Rust. TypeScript must not maintain a competing mutable simulation world.
-- Keep `tessera-core` independent of browsers, Babylon, React, and protocol or Wasm bindings unless a later approved milestone says otherwise.
-- Prefer explicit integer widths, deterministic ordering, and checked inputs at authority boundaries.
-- Keep Worker calls coarse-grained and data-oriented. Do not add per-entity hot-path calls or hot-path JSON.
-- Use strict TypeScript. Do not introduce casual `any`, unchecked casts, hidden global mutation, or unreviewed public exports.
-- Use safe Rust by default. Do not add casual `unsafe` or suppress warnings to make a check pass.
-- Add dependencies only when their purpose, license, runtime impact, and maintenance cost are understood.
-- Keep tests deterministic and use structured state instead of sleeps or screenshots alone.
-- Change only the files owned by the active milestone and commit each working checkpoint with a short lowercase message.
+These rules keep the simulation deterministic, the browser boundary understandable, and the public package safe to consume.
 
-The current checkpoint is the Milestone 3 lifecycle foundation. Keep additions limited to Babylon engine/scene ownership, the explicit Worker readiness/synchronization bridge, one placeholder visual, lifecycle diagnostics, and deterministic tests. Do not add camera controls, picking, entity-to-visual mappings, React, persistence, gameplay systems, or test-bridge globals until later milestones are approved.
+## Ownership
+
+- Rust owns authoritative state and every gameplay-affecting decision.
+- TypeScript owns browser lifecycle, Worker communication, input translation, persistence adapters, and derived presentation state.
+- Babylon.js is a view. It must never become a second simulation store or the authority for entity existence.
+- `tessera-core` stays independent of browsers, Babylon.js, React, and protocol/Wasm bindings unless an approved design change says otherwise.
+
+## Data and boundaries
+
+- Prefer explicit integer widths, checked inputs, and stable ordering at authority boundaries.
+- Keep Worker calls coarse-grained and data-oriented. Do not add per-entity calls to a hot path.
+- Keep JSON out of the per-frame render path.
+- Treat protocol bytes, save data, asset metadata, and imported scenarios as untrusted input.
+- Use versioned formats and fail closed on unknown required fields or malformed lengths.
+
+## TypeScript and Rust
+
+- Keep TypeScript strict. Avoid `any`, unchecked casts, hidden global mutation, and unreviewed public exports.
+- Use safe Rust by default. Do not add `unsafe` or suppress a warning simply to get a check passing.
+- Keep deterministic logic out of browser clocks, locale-sensitive APIs, random browser helpers, and unstable iteration order.
+- Keep visual interpolation and UI state separate from the state hash.
+
+## Dependencies and tests
+
+- Add a dependency only when its purpose, licence, maintenance status, and runtime or build impact are understood.
+- Keep tests deterministic. Prefer hashes, protocol records, structured diagnostics, and explicit waits over sleeps.
+- A screenshot can support a visual assertion, but it should not be the only evidence for behaviour.
+- Update documentation when a public contract, setup step, or architectural boundary changes.
+
+## Change scope
+
+Keep a change limited to one coherent milestone or maintenance task. Do not mix unrelated cleanup into feature work. Review generated Wasm and lockfile changes deliberately.
+
+Until the camera milestone is approved, the implementation scope is the Babylon lifecycle, the Worker readiness bridge, the placeholder scene, diagnostics, and their tests. Camera controls, picking, entity-to-visual mappings, React, persistence, gameplay systems, and the test bridge belong to later milestones.
