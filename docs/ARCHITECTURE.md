@@ -2,6 +2,37 @@
 
 Tessera has one important rule: Rust owns the simulation. The browser hosts the runtime and presents its results, but it never becomes a second game state.
 
+```mermaid
+flowchart TB
+  subgraph consumer["Consumer"]
+    app["Ustawi or Scenario Lab"]
+  end
+
+  subgraph browser["Browser"]
+    api["Public TypeScript API"]
+    host["Runtime host"]
+    worker["Dedicated Worker"]
+    renderer["Babylon.js renderer"]
+  end
+
+  subgraph rust["Rust"]
+    core["tessera-core"]
+    protocol["tessera-protocol"]
+    cli["tessera-cli"]
+  end
+
+  app --> api
+  api --> host
+  host -->|commands and controls| worker
+  worker -->|Wasm adapter| core
+  core -->|events and snapshots| worker
+  worker -->|transferable buffers| host
+  host --> renderer
+  core -. shared formats .- protocol
+  cli -. uses .- core
+  cli -. uses .- protocol
+```
+
 ## Runtime responsibilities
 
 | Part              | Responsibility                                                                                        |
