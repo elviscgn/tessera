@@ -28,8 +28,8 @@ The v0.1 release surface is complete. The remaining work is owner-level release 
 
 ## Planned checkpoints
 
-| Milestone | Focus                                                                                        |
-| --------- | -------------------------------------------------------------------------------------------- |
+| Milestone | Focus                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------------ |
 | —         | Post-release owner activity: tag the v0.1 artifact, record release evidence, and review the foundation |
 
 ## Beyond v0.1
