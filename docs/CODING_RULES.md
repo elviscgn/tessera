@@ -7,6 +7,7 @@ These rules keep the simulation deterministic, the browser boundary understandab
 - Rust owns authoritative state and every gameplay-affecting decision.
 - TypeScript owns browser lifecycle, Worker communication, input translation, persistence adapters, and derived presentation state.
 - Babylon.js is a view. It must never become a second simulation store or the authority for entity existence.
+- Babylon picking may select only a currently mapped visual whose slot and generation came from a validated Rust snapshot.
 - `tessera-core` stays independent of browsers, Babylon.js, React, and protocol/Wasm bindings unless an approved design change says otherwise.
 
 ## Data and boundaries
@@ -23,6 +24,7 @@ These rules keep the simulation deterministic, the browser boundary understandab
 - Use safe Rust by default. Do not add `unsafe` or suppress a warning simply to get a check passing.
 - Keep deterministic logic out of browser clocks, locale-sensitive APIs, random browser helpers, and unstable iteration order.
 - Keep visual interpolation and UI state separate from the state hash.
+- Treat selection, camera state, screen bounds, and pointer coordinates as presentation state; they never become commands implicitly.
 
 ## Dependencies and tests
 
@@ -35,4 +37,4 @@ These rules keep the simulation deterministic, the browser boundary understandab
 
 Keep a change limited to one coherent milestone or maintenance task. Do not mix unrelated cleanup into feature work. Review generated Wasm and lockfile changes deliberately.
 
-The current implementation scope includes the Babylon lifecycle, the Worker readiness bridge, the placeholder scene, the pure orthographic camera model, named camera actions, coordinate conversion, authoritative grid occupancy, the debug-grid projection, diagnostics, and their tests. Picking, entity-to-visual mappings, React, persistence, gameplay systems, and the test bridge belong to later milestones.
+The current implementation scope includes the Babylon lifecycle, the Worker readiness bridge, the orthographic camera model, named camera actions, coordinate conversion, authoritative grid occupancy, the debug-grid projection, slot/generation selection, deterministic waits, diagnostics, and their tests. React, persistence, gameplay systems, and the test bridge belong to later milestones.

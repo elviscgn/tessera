@@ -46,11 +46,22 @@ const packedEmptySnapshot = (): ArrayBuffer => {
   view.setUint16(52, 9, true);
   view.setUint16(54, 32, true);
   view.setUint32(56, 64, true);
-  for (let index = 0; index < 9; index += 1) {
+  const regionLayouts: ReadonlyArray<readonly [number, number, number]> = [
+    [1, 3, 1],
+    [2, 3, 1],
+    [3, 4, 3],
+    [4, 5, 4],
+    [5, 5, 3],
+    [6, 3, 1],
+    [7, 3, 1],
+    [8, 2, 1],
+    [9, 2, 1],
+  ];
+  for (const [index, [kind, scalarType, componentCount]] of regionLayouts.entries()) {
     const offset = 64 + index * 32;
-    view.setUint16(offset, index + 1, true);
-    view.setUint8(offset + 2, index === 2 ? 4 : index >= 3 && index <= 4 ? 5 : 3);
-    view.setUint8(offset + 3, index === 2 ? 3 : index === 3 ? 4 : index === 4 ? 3 : 1);
+    view.setUint16(offset, kind, true);
+    view.setUint8(offset + 2, scalarType);
+    view.setUint8(offset + 3, componentCount);
     view.setUint32(offset + 8, 352, true);
     view.setUint32(offset + 12, 0, true);
     view.setUint32(offset + 16, 0, true);
@@ -159,7 +170,13 @@ describe('foundation runtime lifecycle', () => {
 
     expect(renderer.starts).toBe(1);
     expect(worker.messages[0]?.message.type).toBe('initialize');
+    expect(runtime.waitForReady()).toBe(runtime.ready);
+    expect(runtime.selectedEntity()).toBeUndefined();
     await expect(runtime.submitCommand(new ArrayBuffer(0), 0)).rejects.toThrow('not_ready');
+    const simulationWait = runtime.waitForSimulationTick(1);
+    const renderWait = runtime.waitForRenderedTick(1);
+    const generationWait = runtime.waitForRenderGeneration(1);
+    const noErrorWait = runtime.waitForNoPendingErrors();
 
     worker.emit({
       type: 'startup-ready',
@@ -169,6 +186,7 @@ describe('foundation runtime lifecycle', () => {
       metrics: metrics(),
     });
     await expect(runtime.ready).resolves.toMatchObject({ tick: 0, protocolVersion: 1 });
+    await expect(noErrorWait).resolves.toMatchObject({ state: 'ready' });
 
     const commandPromise = runtime.submitCommand(new Uint8Array([1, 2, 3]), 1);
     const commandMessage = worker.messages.at(-1)?.message;
@@ -186,6 +204,7 @@ describe('foundation runtime lifecycle', () => {
       metrics: metrics(),
     });
     await expect(commandPromise).resolves.toMatchObject({ tick: 1, stateHashHex: 'ab'.repeat(32) });
+    await expect(simulationWait).resolves.toMatchObject({ simulationTick: 1n });
 
     const snapshotBuffer = packedEmptySnapshot();
     worker.emit({
@@ -197,6 +216,8 @@ describe('foundation runtime lifecycle', () => {
       buffer: snapshotBuffer,
       metrics: metrics(),
     });
+    await expect(renderWait).resolves.toMatchObject({ lastRenderTick: 1n });
+    await expect(generationWait).resolves.toMatchObject({ lastSnapshotGeneration: 1n });
     expect(renderer.consumed).toBe(1);
     expect(worker.messages.at(-1)?.message.type).toBe('return-render-buffer');
     expect(runtime.diagnostics()).toMatchObject({

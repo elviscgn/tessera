@@ -1,7 +1,9 @@
 import {
   createFoundationRuntime,
+  SelectionActionLayer,
   type FoundationDiagnostics,
   type FoundationRuntime,
+  type ScreenBounds,
 } from '../../../src/public/index';
 import { CameraActionLayer } from '../../../src/input/camera-action-layer';
 import { encodeSpawnCommandBatch } from '../../../src/worker/bridge-protocol';
@@ -14,6 +16,8 @@ const cameraZoom = document.querySelector<HTMLElement>('#cameraZoom');
 const cameraTarget = document.querySelector<HTMLElement>('#cameraTarget');
 const pointerCell = document.querySelector<HTMLElement>('#pointerCell');
 const occupiedCells = document.querySelector<HTMLElement>('#occupiedCells');
+const selectedEntity = document.querySelector<HTMLElement>('#selectedEntity');
+const selectionBounds = document.querySelector<HTMLElement>('#selectionBounds');
 const cameraButtons = document.querySelectorAll<HTMLButtonElement>('[data-camera-action]');
 
 if (
@@ -24,7 +28,9 @@ if (
   !cameraZoom ||
   !cameraTarget ||
   !pointerCell ||
-  !occupiedCells
+  !occupiedCells ||
+  !selectedEntity ||
+  !selectionBounds
 ) {
   throw new Error('The Scenario Lab foundation mount is missing.');
 }
@@ -62,18 +68,44 @@ const setMetricDiagnostics = (diagnostics: FoundationDiagnostics): void => {
   }
 };
 
-const setSynchronizationDiagnostics = (diagnostics: FoundationDiagnostics): void => {
+const setEventDiagnostics = (diagnostics: FoundationDiagnostics): void => {
   telemetry.dataset.tesseraEventSequence = String(
     diagnostics.eventStream.highestContiguousSequence,
   );
   telemetry.dataset.tesseraEventDesynced = String(diagnostics.eventStream.desynced);
+};
+
+const optionalMetric = (value: number | undefined): string => String(value ?? 0);
+
+const setRenderFrameDiagnostics = (diagnostics: FoundationDiagnostics): void => {
   telemetry.dataset.tesseraSnapshotGeneration = String(diagnostics.lastSnapshotGeneration);
   telemetry.dataset.tesseraRenderTick = String(diagnostics.lastRenderTick);
   telemetry.dataset.tesseraRenderEntityCount = String(diagnostics.lastEntityCount);
-  telemetry.dataset.tesseraOccupiedCellCount = String(diagnostics.renderer.occupiedCellCount ?? 0);
   telemetry.dataset.tesseraRenderFrames = String(diagnostics.renderer.renderFrames);
   telemetry.dataset.tesseraRendererSnapshots = String(diagnostics.renderer.receivedSnapshots);
-  occupiedCells.textContent = String(diagnostics.renderer.occupiedCellCount ?? 0);
+};
+
+const setRenderEntityDiagnostics = (diagnostics: FoundationDiagnostics): void => {
+  telemetry.dataset.tesseraOccupiedCellCount = optionalMetric(
+    diagnostics.renderer.occupiedCellCount,
+  );
+  telemetry.dataset.tesseraVisibleEntityCount = optionalMetric(
+    diagnostics.renderer.visibleEntityCount,
+  );
+  telemetry.dataset.tesseraStaleMappingCount = optionalMetric(
+    diagnostics.renderer.staleMappingCount,
+  );
+  occupiedCells.textContent = optionalMetric(diagnostics.renderer.occupiedCellCount);
+};
+
+const setRenderDiagnostics = (diagnostics: FoundationDiagnostics): void => {
+  setRenderFrameDiagnostics(diagnostics);
+  setRenderEntityDiagnostics(diagnostics);
+};
+
+const setSynchronizationDiagnostics = (diagnostics: FoundationDiagnostics): void => {
+  setEventDiagnostics(diagnostics);
+  setRenderDiagnostics(diagnostics);
 };
 
 const setOptionalDiagnostics = (diagnostics: FoundationDiagnostics): void => {
@@ -103,6 +135,21 @@ const setCameraLab = (runtime: FoundationRuntime): void => {
   telemetry.dataset.tesseraCameraTargetMm = `${state.targetMm.xMm},${state.targetMm.yMm},${state.targetMm.zMm}`;
 };
 
+const formatSelectionBounds = (bounds: ScreenBounds | undefined): string => {
+  if (bounds === undefined) {
+    return '—';
+  }
+  return `${Math.round(bounds.left)},${Math.round(bounds.top)} ${Math.round(bounds.width)}×${Math.round(bounds.height)}`;
+};
+
+const setSelectionLab = (runtime: FoundationRuntime, entityId: string | undefined): void => {
+  selectedEntity.textContent = entityId ?? '—';
+  telemetry.dataset.tesseraSelectedEntity = entityId ?? '';
+  selectionBounds.textContent = formatSelectionBounds(
+    entityId === undefined ? undefined : runtime.screenBounds(entityId),
+  );
+};
+
 try {
   const runtime = createFoundationRuntime({ canvas });
   const unsubscribe = runtime.subscribeDiagnostics((diagnostics) => {
@@ -117,6 +164,14 @@ try {
   });
   const actionLayer = new CameraActionLayer({ canvas, camera: runtime.camera, viewport });
   actionLayer.attach();
+  const selectionLayer = new SelectionActionLayer({
+    canvas,
+    onPrimaryClick: (point) => runtime.pick(point),
+  });
+  selectionLayer.attach();
+  const unsubscribeSelection = runtime.subscribeSelection((entityId) => {
+    setSelectionLab(runtime, entityId);
+  });
 
   const pointerMove = (event: PointerEvent): void => {
     const bounds = canvas.getBoundingClientRect();
@@ -180,7 +235,9 @@ try {
   const dispose = (): void => {
     unsubscribe();
     unsubscribeCamera();
+    unsubscribeSelection();
     actionLayer.dispose();
+    selectionLayer.dispose();
     canvas.removeEventListener('pointermove', pointerMove);
     canvas.removeEventListener('pointerleave', pointerLeave);
     for (const { button, listener } of buttonListeners) {

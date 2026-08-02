@@ -7,6 +7,10 @@ import {
   FoundationRuntime,
   MAX_CAMERA_ZOOM_TILES,
   MIN_CAMERA_ZOOM_TILES,
+  SelectionActionLayer,
+  boundsFromPoints,
+  formatEntityId,
+  parseEntityId,
   createFoundationRuntime,
 } from '../../src/public/index';
 import type {
@@ -27,6 +31,11 @@ import type {
   FoundationWorker,
   GridCoordinate,
   OrthographicBoundsMm,
+  EntityId,
+  EntityHandle,
+  ScreenBounds,
+  ScreenPoint,
+  SelectionActionLayerOptions,
 } from '../../src/public/index';
 
 describe('public runtime surface', () => {
@@ -56,9 +65,18 @@ describe('public runtime surface', () => {
     const stateName: FoundationState = 'starting';
     const renderer: FoundationRenderer | undefined = undefined;
     const worker: FoundationWorker | undefined = undefined;
+    const entityId: EntityId = formatEntityId({ slot: 0, generation: 1 });
+    const entityHandle: EntityHandle | undefined = parseEntityId(entityId);
+    const selectionPoint: ScreenPoint = { x: 0, y: 0 };
+    const projectedBounds: ScreenBounds | undefined = boundsFromPoints([selectionPoint]);
+    const selectionBounds: ScreenBounds | undefined = undefined;
+    const selectionOptions: SelectionActionLayerOptions | undefined = undefined;
 
     expect(typeof createFoundationRuntime).toBe('function');
+    expect(typeof SelectionActionLayer).toBe('function');
     expect(typeof FoundationRuntime.prototype.dispose).toBe('function');
+    expect(typeof FoundationRuntime.prototype.waitForReady).toBe('function');
+    expect(typeof FoundationRuntime.prototype.selectedEntity).toBe('function');
     expect([MAX_CAMERA_ZOOM_TILES, MIN_CAMERA_ZOOM_TILES, rotation]).toHaveLength(3);
     expect([
       vector,
@@ -71,6 +89,12 @@ describe('public runtime surface', () => {
       stateName,
       renderer,
       worker,
-    ]).toHaveLength(10);
+      entityId,
+      entityHandle,
+      projectedBounds,
+      selectionPoint,
+      selectionBounds,
+      selectionOptions,
+    ]).toHaveLength(16);
   });
 });

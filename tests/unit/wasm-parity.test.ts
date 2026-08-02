@@ -9,6 +9,7 @@ import {
 import {
   decodeOccupiedCells,
   decodeEventBatch,
+  decodeRenderEntities,
   decodeRenderMemoryDescriptor,
   decodeRenderSnapshot,
 } from '../../src/worker/data-protocol';
@@ -56,6 +57,12 @@ describe('generated web-target Wasm adapter', () => {
           firstSnapshot,
         ),
       ).toEqual([{ x: 0, z: 0, elevationMm: 0 }]);
+      expect(
+        decodeRenderEntities(
+          new Uint8Array(firstMemoryBuffer, firstDescriptor.pointer, firstDescriptor.byteLength),
+          firstSnapshot,
+        ),
+      ).toMatchObject([{ slot: 0, generation: 1, x: 0, z: 0, visualType: 1 }]);
 
       const eventBatch = decodeEventBatch(adapter.event_batch(0n, 1024));
       expect(eventBatch.firstSequence).toBe(1n);

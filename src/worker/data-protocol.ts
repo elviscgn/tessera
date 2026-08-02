@@ -84,6 +84,27 @@ export interface RenderGridCell {
   readonly elevationMm: number;
 }
 
+export interface RenderEntityRecord {
+  readonly slot: number;
+  readonly generation: number;
+  readonly x: number;
+  readonly z: number;
+  readonly elevationMm: number;
+  readonly rotation: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+    readonly w: number;
+  };
+  readonly scale: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  };
+  readonly visualType: number;
+  readonly renderFlags: number;
+}
+
 export const decodeRenderMemoryDescriptor = (
   input: ArrayBuffer | Uint8Array,
 ): RenderMemoryDescriptor => {
@@ -261,19 +282,23 @@ const decodeRenderRegion = (
 const decodeRenderRegions = (header: RenderHeader): readonly RenderRegionMetadata[] => {
   const regions: RenderRegionMetadata[] = [];
   const intervals: Array<{ readonly start: number; readonly end: number }> = [];
+  const kinds = new Set<number>();
   const regionTableOffset = header.view.getUint32(56, true);
   for (let index = 0; index < header.regionCount; index += 1) {
-    regions.push(
-      decodeRenderRegion(
-        header.view,
-        header.totalByteLength,
-        header.regionTableEnd,
-        regionTableOffset,
-        header.descriptorSize,
-        index,
-        intervals,
-      ),
+    const region = decodeRenderRegion(
+      header.view,
+      header.totalByteLength,
+      header.regionTableEnd,
+      regionTableOffset,
+      header.descriptorSize,
+      index,
+      intervals,
     );
+    if (kinds.has(region.kind)) {
+      throw new Error(`render region kind ${region.kind} is duplicated`);
+    }
+    kinds.add(region.kind);
+    regions.push(region);
   }
   return regions;
 };
@@ -318,6 +343,127 @@ export const decodeOccupiedCells = (
     });
   }
   return cells;
+};
+
+const requiredRegion = (
+  metadata: RenderSnapshotMetadata,
+  kind: number,
+  label: string,
+): RenderRegionMetadata => {
+  const region = metadata.regions.find((candidate) => candidate.kind === kind);
+  if (region === undefined) {
+    throw new Error(`render snapshot is missing the ${label} region`);
+  }
+  if (region.elementCount !== metadata.entityCount) {
+    throw new Error(`render ${label} region count does not match the entity count`);
+  }
+  return region;
+};
+
+const assertRegionLayout = (
+  region: RenderRegionMetadata,
+  scalarType: number,
+  componentCount: number,
+  label: string,
+): void => {
+  if (region.scalarType !== scalarType || region.componentCount !== componentCount) {
+    throw new Error(`render ${label} region has an invalid scalar layout`);
+  }
+};
+
+const readEntityRegions = (
+  input: ArrayBuffer | Uint8Array,
+  metadata: RenderSnapshotMetadata,
+): {
+  readonly view: DataView;
+  readonly slots: RenderRegionMetadata;
+  readonly generations: RenderRegionMetadata;
+  readonly positions: RenderRegionMetadata;
+  readonly rotations: RenderRegionMetadata;
+  readonly scales: RenderRegionMetadata;
+  readonly visualTypes: RenderRegionMetadata;
+  readonly renderFlags: RenderRegionMetadata;
+} => {
+  const bytes = asBytes(input);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const slots = requiredRegion(metadata, 1, 'entity slot');
+  const generations = requiredRegion(metadata, 2, 'entity generation');
+  const positions = requiredRegion(metadata, 3, 'position');
+  const rotations = requiredRegion(metadata, 4, 'rotation');
+  const scales = requiredRegion(metadata, 5, 'scale');
+  const visualTypes = requiredRegion(metadata, 6, 'visual type');
+  const renderFlags = requiredRegion(metadata, 7, 'render flags');
+  assertRegionLayout(slots, 3, 1, 'entity slot');
+  assertRegionLayout(generations, 3, 1, 'entity generation');
+  assertRegionLayout(positions, 4, 3, 'position');
+  assertRegionLayout(rotations, 5, 4, 'rotation');
+  assertRegionLayout(scales, 5, 3, 'scale');
+  assertRegionLayout(visualTypes, 3, 1, 'visual type');
+  assertRegionLayout(renderFlags, 3, 1, 'render flags');
+  return {
+    view,
+    slots,
+    generations,
+    positions,
+    rotations,
+    scales,
+    visualTypes,
+    renderFlags,
+  };
+};
+
+const readEntityRecord = (
+  regions: ReturnType<typeof readEntityRegions>,
+  index: number,
+): RenderEntityRecord => {
+  const { view, slots, generations, positions, rotations, scales, visualTypes, renderFlags } =
+    regions;
+  const slot = view.getUint32(slots.offset + index * 4, true);
+  const generation = view.getUint32(generations.offset + index * 4, true);
+  if (generation === 0) {
+    throw new Error(`render entity ${index} has an invalid generation`);
+  }
+  const positionOffset = positions.offset + index * 12;
+  const rotationOffset = rotations.offset + index * 16;
+  const scaleOffset = scales.offset + index * 12;
+  return {
+    slot,
+    generation,
+    x: view.getInt32(positionOffset, true),
+    z: view.getInt32(positionOffset + 4, true),
+    elevationMm: view.getInt32(positionOffset + 8, true),
+    rotation: {
+      x: view.getFloat32(rotationOffset, true),
+      y: view.getFloat32(rotationOffset + 4, true),
+      z: view.getFloat32(rotationOffset + 8, true),
+      w: view.getFloat32(rotationOffset + 12, true),
+    },
+    scale: {
+      x: view.getFloat32(scaleOffset, true),
+      y: view.getFloat32(scaleOffset + 4, true),
+      z: view.getFloat32(scaleOffset + 8, true),
+    },
+    visualType: view.getUint32(visualTypes.offset + index * 4, true),
+    renderFlags: view.getUint32(renderFlags.offset + index * 4, true),
+  };
+};
+
+/** Decodes the entity transform regions before the transferable buffer returns to the Worker. */
+export const decodeRenderEntities = (
+  input: ArrayBuffer | Uint8Array,
+  metadata: RenderSnapshotMetadata = decodeRenderSnapshot(input),
+): readonly RenderEntityRecord[] => {
+  const regions = readEntityRegions(input, metadata);
+  const entities: RenderEntityRecord[] = [];
+  const slots = new Set<number>();
+  for (let index = 0; index < metadata.entityCount; index += 1) {
+    const entity = readEntityRecord(regions, index);
+    if (!slots.add(entity.slot)) {
+      throw new Error(`render snapshot repeats entity slot ${entity.slot}`);
+    }
+    entities.push(entity);
+  }
+  return entities;
 };
 
 export const patchRenderMemoryGeneration = (buffer: ArrayBuffer, generation: number): void => {
