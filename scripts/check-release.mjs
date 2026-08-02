@@ -1,5 +1,8 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 const repositoryRoot = resolve(import.meta.dirname, '..');
 
@@ -12,7 +15,11 @@ const readJson = (relativePath) => {
   if (!existsSync(path)) {
     fail(`missing file ${relativePath}`);
   }
-  return JSON.parse(readFileSync(path, 'utf8'));
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch (error) {
+    fail(`invalid JSON in ${relativePath}: ${String(error)}`);
+  }
 };
 
 const readSource = (relativePath) => {
@@ -54,7 +61,7 @@ if (artifactManifest.sha256 === 'TO_BE_FILLED_BY_CHECK_EXTERNAL_CONSUMER') {
   fail('artifact manifest checksum is not pinned');
 }
 const frameworkVersionPattern = new RegExp(
-  `SAVE_FRAMEWORK_VERSION\\s*=\\s*'${frameworkVersion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`,
+  String.raw`SAVE_FRAMEWORK_VERSION\s*=\s*['"]${frameworkVersion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`,
 );
 if (!frameworkVersionPattern.test(bridgeProtocol)) {
   fail(
@@ -62,7 +69,7 @@ if (!frameworkVersionPattern.test(bridgeProtocol)) {
   );
 }
 
-const protocolVersionPattern = /PROTOCOL_VERSION\s*=\s*(\d+)/;
+const protocolVersionPattern = /(?:export )?const PROTOCOL_VERSION\s*=\s*(\d+)/;
 const rustMatch = rustProtocol.match(/pub const PROTOCOL_VERSION: u16 = (\d+);/);
 const bridgeMatch = bridgeProtocol.match(protocolVersionPattern);
 const dataMatch = dataProtocol.match(protocolVersionPattern);
@@ -105,6 +112,34 @@ if (!/does not include|deliberately does not include/u.test(readme)) {
   fail('README.md must document known limitations');
 }
 
+const packDirectory = mkdtempSync(join(tmpdir(), 'tessera-release-check-'));
+try {
+  execFileSync('pnpm', ['pack', '--pack-destination', packDirectory], {
+    cwd: repositoryRoot,
+    stdio: 'inherit',
+  });
+  const archives = readdirSync(packDirectory).filter((entry) => entry.endsWith('.tgz'));
+  if (archives.length !== 1) {
+    fail(`expected one packed artifact, found ${archives.length}`);
+  }
+  const archive = archives[0];
+  if (archive !== artifactManifest.filename) {
+    fail(
+      `packed artifact ${archive} does not match manifest filename ${artifactManifest.filename}`,
+    );
+  }
+  const checksum = createHash('sha256')
+    .update(readFileSync(join(packDirectory, archive)))
+    .digest('hex');
+  if (checksum !== artifactManifest.sha256) {
+    fail(
+      `artifact checksum mismatch (manifest ${artifactManifest.sha256}, packed ${checksum}); run pnpm pack:runtime and update artifact-manifest.json`,
+    );
+  }
+} finally {
+  rmSync(packDirectory, { recursive: true, force: true });
+}
+
 console.log(
-  `Release validation passed: framework ${frameworkVersion}, protocol v${[...versions][0]}, ${requiredDocs.length} documents.`,
+  `Release validation passed: framework ${frameworkVersion}, protocol v${[...versions][0]}, ${requiredDocs.length} documents, artifact pinned.`,
 );
