@@ -40,6 +40,8 @@ For a narrower change, use the focused commands in [TESTING.md](TESTING.md). Tes
 
 ## Pull requests
 
+GitHub supplies a checklist from `.github/pull_request_template.md`. Keep it honest: a checked box should point to a command, test, screenshot, or reviewable diff that provides the evidence.
+
 A useful pull request says:
 
 - what changed and why;
