@@ -2,10 +2,11 @@
   <h1>Tessera</h1>
   <p><strong>A deterministic Rust/Wasm foundation for browser-based isometric worlds.</strong></p>
   <p>
-    <a href="https://github.com/elviscgn/tessera/actions/workflows/ci.yml"><img src="https://github.com/elviscgn/tessera/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0f766e.svg" alt="MIT License"></a>
-    <img src="https://img.shields.io/badge/runtime-Rust%20%2B%20Wasm-7c3aed.svg" alt="Rust and Wasm runtime">
-    <img src="https://img.shields.io/badge/renderer-Babylon.js-2563eb.svg" alt="Babylon.js renderer">
+    <a href="https://github.com/elviscgn/tessera/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/elviscgn/tessera/ci.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=CI" alt="CI status"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0f766e?style=flat&logo=opensourceinitiative&logoColor=white" alt="MIT License"></a>
+    <img src="https://img.shields.io/badge/Rust-1.97.1-000000?style=flat&logo=rust&logoColor=white" alt="Rust 1.97.1">
+    <img src="https://img.shields.io/badge/WebAssembly-target-654ff0?style=flat&logo=webassembly&logoColor=white" alt="WebAssembly target">
+    <img src="https://img.shields.io/badge/Babylon.js-renderer-2563eb?style=flat&logo=babylondotjs&logoColor=white" alt="Babylon.js renderer">
   </p>
 </div>
 
@@ -48,6 +49,14 @@ flowchart LR
 | **Browser shell**        | Babylon.js lifecycle, readiness, diagnostics, and deterministic shutdown                            |
 
 The next milestone is the isometric camera and canonical coordinate conversion. Placement, picking, persistence, the consumer-facing runtime API, and the full Scenario Lab remain in development.
+
+## Running in the browser
+
+<p align="center">
+  <img src="docs/assets/scenario-lab-foundation.jpg" alt="Tessera Scenario Lab showing a Babylon.js render and a successful probe at tick 1" width="900">
+</p>
+
+<p align="center"><em>The current foundation probe: a Babylon.js scene rendered from the Worker/Wasm runtime, with the Rust-backed command round trip completing at tick 1.</em></p>
 
 ## Quick start
 
