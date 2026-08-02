@@ -1,6 +1,6 @@
 # Local setup
 
-Milestone 2B uses exact tool versions. Select Node 24.18.1 with a version manager that reads `.node-version`; do not substitute the host Node version.
+Milestone 3 uses exact tool versions. Select Node 24.18.1 with a version manager that reads `.node-version`; do not substitute the host Node version.
 
 ```sh
 node --version
@@ -27,4 +27,4 @@ pnpm tool:versions
 pnpm check
 ```
 
-`pnpm check` runs formatting, ESLint, strict TypeScript, Vitest, native Rust checks, the pinned `wasm-pack --target web` build, and the Vite production build. It does not install Babylon, Playwright, React, or a renderer. The generated Worker module under `src/worker/wasm` is checked in because it is an application build input; `pnpm check:wasm` regenerates it and the diff must remain reproducible. Keep `pnpm-lock.yaml` and `rust/Cargo.lock` committed and use `pnpm install --frozen-lockfile` in clean environments.
+`pnpm check` runs formatting, ESLint, strict TypeScript, Vitest, native Rust checks, the pinned `wasm-pack --target web` build, and the Vite production build. Babylon core/loaders are pinned runtime dependencies for the lifecycle milestone; Playwright and React remain out of the package. The generated Worker module under `src/worker/wasm` is checked in because it is an application build input; `pnpm check:wasm` regenerates it and the diff must remain reproducible. Keep `pnpm-lock.yaml` and `rust/Cargo.lock` committed and use `pnpm install --frozen-lockfile` in clean environments.

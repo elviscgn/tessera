@@ -1,7 +1,18 @@
 /**
- * Public-module marker for the future runtime package.
+ * Foundation runtime entry point.
  *
- * Milestone 2A deliberately exports no public runtime API or mutable state;
- * the Worker boundary is still the only browser integration surface.
+ * This intentionally exposes only lifecycle/readiness primitives until later
+ * milestones add the declarative scenario, camera, persistence, and gameplay
+ * contracts described by the architecture plan.
  */
-export {};
+export {
+  createFoundationRuntime,
+  FoundationRuntime,
+  type FoundationDiagnostics,
+  type FoundationError,
+  type FoundationReady,
+  type FoundationRenderer,
+  type FoundationRuntimeOptions,
+  type FoundationState,
+  type FoundationWorker,
+} from '../browser/foundation-runtime';

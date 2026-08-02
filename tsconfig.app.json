@@ -5,7 +5,9 @@
     "types": ["node", "vite/client"]
   },
   "include": [
+    "src/browser/**/*.ts",
     "src/public/**/*.ts",
+    "src/renderer/**/*.ts",
     "apps/**/*.ts",
     "tests/**/*.ts",
     "vite.config.ts",

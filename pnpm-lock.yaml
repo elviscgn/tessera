@@ -7,6 +7,13 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@babylonjs/core':
+        specifier: 9.19.0
+        version: 9.19.0
+      '@babylonjs/loaders':
+        specifier: 9.19.0
+        version: 9.19.0(@babylonjs/core@9.19.0)(babylonjs-gltf2interface@9.19.0)
     devDependencies:
       '@eslint/js':
         specifier: 10.0.1
@@ -37,6 +44,15 @@ importers:
         version: 4.1.10(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3))
 
 packages:
+
+  '@babylonjs/core@9.19.0':
+    resolution: {integrity: sha512-8bQfSnXnFVEUolPBl5Y3S1WDmQKpPKfguOQvGdCxjTIHlLku8Crc0DdvlFbmqeGpS/bQ3NzwtApB84GScm9v8w==}
+
+  '@babylonjs/loaders@9.19.0':
+    resolution: {integrity: sha512-WMhlOl9HWDvNFmywQ/jl0dKkyT6lzCH0YUNZ2xkeD+j5TBFfPdkPGbn9Hd9UJnwqUZrz42Y6lRAZ5VZQNQa7kg==}
+    peerDependencies:
+      '@babylonjs/core': ^9.0.0
+      babylonjs-gltf2interface: ^9.0.0
 
   '@emnapi/core@1.11.1':
     resolution: {integrity: sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ==}
@@ -345,6 +361,9 @@ packages:
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
     engines: {node: '>=12'}
+
+  babylonjs-gltf2interface@9.19.0:
+    resolution: {integrity: sha512-VyXEf5QKcE5XaHfUVUmzjqyUro89zZaDjBxRXtbUuc4suHNrBfqOHecfCRvD3PaHtdtN+ZF8A4g1n06Pi70Rlw==}
 
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
@@ -850,6 +869,13 @@ packages:
 
 snapshots:
 
+  '@babylonjs/core@9.19.0': {}
+
+  '@babylonjs/loaders@9.19.0(@babylonjs/core@9.19.0)(babylonjs-gltf2interface@9.19.0)':
+    dependencies:
+      '@babylonjs/core': 9.19.0
+      babylonjs-gltf2interface: 9.19.0
+
   '@emnapi/core@1.11.1':
     dependencies:
       '@emnapi/wasi-threads': 1.2.2
@@ -1148,6 +1174,8 @@ snapshots:
       uri-js: 4.4.1
 
   assertion-error@2.0.1: {}
+
+  babylonjs-gltf2interface@9.19.0: {}
 
   balanced-match@4.0.4: {}
 

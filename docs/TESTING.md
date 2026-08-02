@@ -49,8 +49,14 @@ Milestone 2B adds the data-plane and ownership checks:
 - The generated web-target Wasm parity test compares the native probe hash, decodes the packed snapshot and event batch, acknowledges the event checkpoint, grows Wasm memory, and decodes a fresh snapshot from recreated views.
 - The Scenario Lab Worker probe exposes readiness, packed event/render metadata, ACK progress, memory-generation counters, and dropped-snapshot metrics as `data-tessera-*` attributes. A browser smoke run is required before the milestone is accepted.
 
-The browser probe remains a development-only smoke check for this checkpoint; it does not install Babylon, Playwright, or a test bridge. Renderer work remains gated until the Worker boundary proves packed data, memory-growth recovery, transferable-buffer ownership, structured errors, and native-versus-Wasm state-hash parity.
+Milestone 3 adds lifecycle and renderer-foundation checks:
 
-Run the aggregate `pnpm check` from the repository root after the pinned dependencies are installed. It expands to `pnpm check:format`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm check:rust`, `pnpm check:wasm`, and `pnpm build`. The generated Wasm module is a checked-in application input; inspect its regenerated diff and the staged file list before committing. Milestones 0–2B do not install Playwright, compare visuals, test gameplay, or add a test bridge.
+- Vitest fakes the Worker and renderer to verify readiness resolution, command routing, snapshot validation/return, metrics requests, fatal startup cleanup, and repeated create-ready-dispose cycles.
+- The production build includes modular Babylon core imports and the glTF loader registration while keeping the Rust Worker as the only authority.
+- The Scenario Lab browser smoke verifies the Babylon canvas, placeholder scene, active render loop, Worker probe, packed snapshot synchronization, and `pagehide` disposal path. Structured attributes expose render-frame and renderer-snapshot counts alongside the existing boundary metrics.
 
-Later milestones add native/Wasm parity, protocol fixtures, Worker boundary tests, Playwright flows, Chromium visuals, Firefox/WebKit smoke coverage, performance harnesses, lifecycle checks, and an isolated external consumer. Those checks are intentionally outside this native checkpoint.
+The foundation still has no camera controls, picking, entity-to-mesh mapping, test bridge, persistence, or gameplay APIs; those remain gated by later milestones.
+
+Run the aggregate `pnpm check` from the repository root after the pinned dependencies are installed. It expands to `pnpm check:format`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm check:rust`, `pnpm check:wasm`, and `pnpm build`. The generated Wasm module is a checked-in application input; inspect its regenerated diff and the staged file list before committing. Milestones 0–3 do not install Playwright, compare visuals, test gameplay, or add a test bridge.
+
+Later milestones add camera/grid/selection behavior, protocol fixtures, Worker boundary tests, Playwright flows, Chromium visuals, Firefox/WebKit smoke coverage, performance harnesses, lifecycle checks, and an isolated external consumer. Those checks are intentionally outside this lifecycle checkpoint.
