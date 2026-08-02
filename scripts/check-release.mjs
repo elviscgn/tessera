@@ -114,7 +114,7 @@ if (!/does not include|deliberately does not include/u.test(readme)) {
 
 const packDirectory = mkdtempSync(join(tmpdir(), 'tessera-release-check-'));
 try {
-  execFileSync('pnpm', ['pack', '--pack-destination', packDirectory], {
+  execFileSync('node', ['scripts/pack-runtime.mjs', packDirectory], {
     cwd: repositoryRoot,
     stdio: 'inherit',
   });

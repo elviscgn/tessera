@@ -29,7 +29,7 @@ try {
     fail('artifact-manifest.json must contain the committed tarball checksum');
   }
 
-  run('pnpm', ['pack', '--pack-destination', artifactRoot], repositoryRoot);
+  run('node', ['scripts/pack-runtime.mjs', artifactRoot], repositoryRoot);
   const archives = readdirSync(artifactRoot).filter((entry) => entry.endsWith('.tgz'));
   if (archives.length !== 1) {
     fail(`expected one packed artifact, found ${archives.length}`);

@@ -15,7 +15,7 @@ const packDirectory = mkdtempSync(join(tmpdir(), 'tessera-manifest-update-'));
 let archiveName;
 let checksum;
 try {
-  execFileSync('pnpm', ['pack', '--pack-destination', packDirectory], {
+  execFileSync('node', ['scripts/pack-runtime.mjs', packDirectory], {
     cwd: repositoryRoot,
     stdio: 'inherit',
   });

@@ -39,7 +39,7 @@
     "check:wasm": "pnpm build:wasm",
     "build:package": "node scripts/build-package.mjs",
     "prepack": "pnpm build:package",
-    "pack:runtime": "pnpm pack --pack-destination artifacts",
+    "pack:runtime": "node scripts/pack-runtime.mjs artifacts",
     "update:artifact-manifest": "node scripts/update-artifact-manifest.mjs",
     "check:package": "node scripts/check-package.mjs",
     "check:release": "node scripts/check-release.mjs",
