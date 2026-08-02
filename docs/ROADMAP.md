@@ -20,16 +20,17 @@ Tessera is delivered in small checkpoints so each release keeps a clear, reviewa
 - **Milestone 12 — browser regression:** pinned Playwright flows, canonical Chromium museum visuals, production bridge exclusion smoke, and Firefox/WebKit compatibility smoke.
 - **Milestone 13 — performance and cleanup:** native/browser harnesses, lifecycle checks, recorded baselines, and evidence gates for optimization.
 - **Milestone 14 — external consumer proof:** an outside-workspace consumer installing the packed artifact through the public export map, reproducing version pinning, and rejecting internal imports.
+- **Milestone 15 — first usable release:** validated public documentation, API contracts, package exports, version metadata, protocol compatibility, artifact checksum pinning, known limitations, and the deferred roadmap.
 
 ## Next
 
-**Milestone 15 — first usable release** is the next implementation checkpoint. It will validate public documentation, API contracts, package exports, version metadata, protocol compatibility, the release artifact checksum, known limitations, and the deferred roadmap.
+The v0.1 release surface is complete. The remaining work is owner-level release activity: running the GitHub release gate on the merged branch, attaching the pinned artifact and checksum to a tag, and preparing the separate Milestone 1 task when the foundation review accepts the evidence. Future consumer-owned Rust gameplay depends on the Ustawi-driven composition decision gate.
 
 ## Planned checkpoints
 
 | Milestone | Focus                                                                                        |
 | --------- | -------------------------------------------------------------------------------------------- |
-| 15        | First usable release validation, documentation, limitations, checksums, and tagged artifacts |
+| —         | Post-release owner activity: tag the v0.1 artifact, record release evidence, and review the foundation |
 
 ## Beyond v0.1
 
