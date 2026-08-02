@@ -1,6 +1,7 @@
 /**
  * Public-module marker for the future runtime package.
  *
- * Milestone 0 deliberately exports no runtime API or mutable state.
+ * Milestone 2A deliberately exports no public runtime API or mutable state;
+ * the Worker boundary is still the only browser integration surface.
  */
 export {};

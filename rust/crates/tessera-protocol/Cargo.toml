@@ -5,5 +5,8 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[dependencies]
+tessera-core = { path = "../tessera-core" }
+
 [lints]
 workspace = true

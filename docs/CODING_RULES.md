@@ -10,4 +10,4 @@
 - Keep tests deterministic and use structured state instead of sleeps or screenshots alone.
 - Change only the files owned by the active milestone and commit each working checkpoint with a short lowercase message.
 
-The current milestone is foundation-only. Do not add simulation ticks, protocols, Wasm bindings, Babylon, React, persistence, browser tests, or gameplay placeholders.
+The current checkpoint is the Milestone 2A control boundary. Keep additions limited to the browser-independent command codec, the explicit web-target Wasm adapter, the dedicated Worker, and their deterministic tests. Do not add packed render snapshots, memory-growth recovery, Babylon, React, persistence, gameplay systems, or renderer features until Milestone 2B is approved.

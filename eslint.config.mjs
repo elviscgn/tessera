@@ -10,6 +10,7 @@ export default tseslint.config(
       'coverage/**',
       'rust/**',
       '.tools/**',
+      'src/worker/wasm/**',
       'pnpm-lock.yaml',
     ],
   },
