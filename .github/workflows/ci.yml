@@ -56,6 +56,7 @@ jobs:
       - name: install wasm-pack
         run: |
           cargo install wasm-pack --version 0.15.0 --locked --root "${RUNNER_TEMP}/tessera-tools"
+          echo "${RUNNER_TEMP}/tessera-tools/bin" >> "${GITHUB_PATH}"
           "${RUNNER_TEMP}/tessera-tools/bin/wasm-pack" --version | grep -E '^wasm-pack 0\.15\.0'
 
       - name: install JavaScript dependencies
