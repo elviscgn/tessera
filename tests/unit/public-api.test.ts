@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CameraActionLayer,
   CameraProjection,
   DEFAULT_CAMERA_PITCH_RADIANS,
   DEFAULT_CAMERA_ZOOM_TILES,
@@ -8,6 +9,7 @@ import {
   MAX_CAMERA_ZOOM_TILES,
   MIN_CAMERA_ZOOM_TILES,
   SelectionActionLayer,
+  viewportForCanvas,
   boundsFromPoints,
   formatEntityId,
   parseEntityId,
@@ -97,7 +99,16 @@ describe('public runtime surface', () => {
     const preview: PlacementPreview = { ...placement, pending: false };
 
     expect(typeof createFoundationRuntime).toBe('function');
+    expect(typeof CameraActionLayer).toBe('function');
     expect(typeof SelectionActionLayer).toBe('function');
+    expect(
+      viewportForCanvas({
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      } as HTMLCanvasElement),
+    ).toEqual({
+      width: 800,
+      height: 600,
+    });
     expect(typeof FoundationRuntime.prototype.dispose).toBe('function');
     expect(typeof FoundationRuntime.prototype.waitForReady).toBe('function');
     expect(typeof FoundationRuntime.prototype.selectedEntity).toBe('function');

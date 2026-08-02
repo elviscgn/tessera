@@ -7,7 +7,7 @@ write occupancy, entities, randomness, or ticks directly.
 
 ## Development test surface
 
-The Scenario Lab registers the development-only `window.tesseraTest` facade.
+The Scenario Lab registers the development-only `window.tesseraTest` facade and uses it across the boundary, persistence, museum, error, and lifecycle laboratories.
 The public entry point is kept separate so a consumer can opt into it in a
 development build:
 

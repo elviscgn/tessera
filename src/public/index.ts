@@ -71,3 +71,7 @@ export {
   SelectionActionLayer,
   type SelectionActionLayerOptions,
 } from '../input/selection-action-layer';
+
+export { CameraActionLayer } from '../input/camera-action-layer';
+
+export { viewportForCanvas } from '../browser/canvas-viewport';

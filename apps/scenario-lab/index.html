@@ -3,11 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tessera foundation laboratory</title>
+    <meta name="theme-color" content="#080b12" />
+    <title>Tessera · Scenario Lab</title>
     <style>
       :root {
         color-scheme: dark;
-        font-family: system-ui, sans-serif;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+        --ink: #f4f7fb;
+        --muted: #91a0b5;
+        --quiet: #64748b;
+        --line: rgb(148 163 184 / 18%);
+        --line-strong: rgb(148 163 184 / 32%);
+        --panel: rgb(12 17 28 / 91%);
+        --panel-soft: rgb(15 23 42 / 82%);
+        --blue: #7dd3fc;
+        --mint: #6ee7b7;
+        --amber: #fbbf24;
+        --rose: #fb7185;
+      }
+
+      * {
+        box-sizing: border-box;
       }
 
       html,
@@ -18,10 +41,63 @@
         margin: 0;
       }
 
+      body {
+        overflow: hidden;
+        background: #080b12;
+        color: var(--ink);
+      }
+
+      button,
+      select,
+      input {
+        font: inherit;
+      }
+
+      button {
+        border: 1px solid var(--line-strong);
+        border-radius: 0.55rem;
+        background: rgb(30 41 59 / 72%);
+        color: var(--ink);
+        cursor: pointer;
+        transition:
+          border-color 140ms ease,
+          background 140ms ease,
+          transform 140ms ease;
+      }
+
+      button:hover,
+      button:focus-visible {
+        border-color: var(--blue);
+        background: rgb(51 65 85 / 86%);
+        outline: none;
+      }
+
+      button:active {
+        transform: translateY(1px);
+      }
+
+      button[data-tone='positive'] {
+        border-color: rgb(110 231 183 / 42%);
+        background: rgb(6 78 59 / 52%);
+      }
+
+      button[data-tone='danger'] {
+        border-color: rgb(251 113 133 / 42%);
+        background: rgb(127 29 29 / 42%);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.44;
+      }
+
       #app {
         position: relative;
         overflow: hidden;
-        background: #090c13;
+        isolation: isolate;
+        background:
+          radial-gradient(circle at 18% 18%, rgb(14 116 144 / 12%), transparent 32rem),
+          radial-gradient(circle at 88% 80%, rgb(124 58 237 / 10%), transparent 28rem), #080b12;
       }
 
       #renderCanvas {
@@ -32,125 +108,731 @@
         touch-action: none;
       }
 
-      #status {
-        position: absolute;
-        z-index: 1;
-        top: 0.75rem;
-        left: 0.75rem;
-        padding: 0.4rem 0.6rem;
-        border: 1px solid #334155;
-        border-radius: 0.35rem;
-        background: rgb(9 12 19 / 82%);
-        color: #dbeafe;
-        font:
-          0.82rem ui-monospace,
-          monospace;
+      #renderCanvas:focus-visible {
+        box-shadow: inset 0 0 0 2px var(--blue);
       }
 
-      #cameraLab {
+      .shell {
         position: absolute;
-        z-index: 1;
-        right: 0.75rem;
-        bottom: 0.75rem;
-        width: min(18rem, calc(100% - 1.5rem));
-        padding: 0.8rem;
-        border: 1px solid #334155;
-        border-radius: 0.55rem;
-        background: rgb(9 12 19 / 88%);
-        color: #cbd5e1;
-        font-size: 0.8rem;
-        line-height: 1.45;
-        backdrop-filter: blur(0.35rem);
+        z-index: 2;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        pointer-events: none;
       }
 
-      #cameraLab h2 {
-        margin: 0 0 0.45rem;
-        color: #f8fafc;
-        font-size: 0.9rem;
+      .topbar,
+      .lab-nav,
+      .control-surface,
+      .statusbar {
+        pointer-events: auto;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 1.25rem 0.75rem;
+        background: linear-gradient(180deg, rgb(8 11 18 / 84%), transparent);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        min-width: 11rem;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 2rem;
+        height: 2rem;
+        place-items: center;
+        border: 1px solid rgb(125 211 252 / 48%);
+        border-radius: 0.6rem;
+        background: linear-gradient(145deg, rgb(14 116 144 / 70%), rgb(30 41 59 / 70%));
+        color: var(--blue);
+        font-size: 0.95rem;
+        font-weight: 800;
+      }
+
+      .brand-copy {
+        display: grid;
+        gap: 0.1rem;
+      }
+
+      .brand-copy strong {
+        font-size: 0.94rem;
         letter-spacing: 0.02em;
       }
 
-      #cameraLab p {
-        margin: 0.25rem 0;
+      .brand-copy span {
+        color: var(--muted);
+        font-size: 0.7rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
       }
 
-      #cameraLab code {
-        color: #93c5fd;
+      #status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        min-height: 2rem;
+        padding: 0.45rem 0.7rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgb(8 11 18 / 62%);
+        color: var(--muted);
+        font:
+          0.74rem ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+
+      #status::before {
+        width: 0.42rem;
+        height: 0.42rem;
+        border-radius: 50%;
+        background: var(--amber);
+        box-shadow: 0 0 0 0.18rem rgb(251 191 36 / 12%);
+        content: '';
+      }
+
+      #status[data-tessera-status='ready']::before,
+      #status[data-tessera-status='probe-passed']::before {
+        background: var(--mint);
+        box-shadow: 0 0 0 0.18rem rgb(110 231 183 / 12%);
+      }
+
+      #status[data-tessera-status='fatal']::before {
+        background: var(--rose);
+        box-shadow: 0 0 0 0.18rem rgb(251 113 133 / 12%);
+      }
+
+      .lab-nav {
+        display: flex;
+        gap: 0.35rem;
+        overflow-x: auto;
+        padding: 0 1.25rem 0.8rem;
+        scrollbar-width: thin;
+      }
+
+      .lab-nav button {
+        flex: 0 0 auto;
+        padding: 0.45rem 0.68rem;
+        border-color: transparent;
+        background: rgb(15 23 42 / 54%);
+        color: var(--muted);
+        font-size: 0.73rem;
+        white-space: nowrap;
+      }
+
+      .lab-nav button[aria-selected='true'] {
+        border-color: rgb(125 211 252 / 46%);
+        background: rgb(14 116 144 / 28%);
+        color: var(--ink);
+      }
+
+      .control-surface {
+        align-self: flex-end;
+        width: min(26rem, calc(100% - 2rem));
+        max-height: min(70vh, 43rem);
+        margin: 0 1.25rem 1rem 0;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 1rem;
+        background: var(--panel);
+        box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 32%);
+        backdrop-filter: blur(1rem);
+        scrollbar-color: rgb(148 163 184 / 28%) transparent;
+      }
+
+      .lab-panel {
+        display: none;
+        padding: 1.1rem;
+      }
+
+      .lab-panel[data-active='true'] {
+        display: block;
+      }
+
+      .lab-heading {
+        display: grid;
+        gap: 0.35rem;
+        margin-bottom: 1rem;
+      }
+
+      .lab-heading small {
+        color: var(--blue);
+        font-size: 0.67rem;
+        font-weight: 700;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .lab-heading h1 {
+        margin: 0;
+        font-size: 1.2rem;
+        letter-spacing: -0.025em;
+      }
+
+      .lab-heading p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.78rem;
+        line-height: 1.5;
+      }
+
+      .readout-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.45rem;
+        margin-bottom: 0.85rem;
+      }
+
+      .readout {
+        min-width: 0;
+        padding: 0.58rem 0.65rem;
+        border: 1px solid var(--line);
+        border-radius: 0.65rem;
+        background: rgb(15 23 42 / 52%);
+      }
+
+      .readout span {
+        display: block;
+        overflow: hidden;
+        color: var(--quiet);
+        font-size: 0.64rem;
+        letter-spacing: 0.08em;
+        text-overflow: ellipsis;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .readout code,
+      .readout output {
+        display: block;
+        margin-top: 0.24rem;
+        overflow: hidden;
+        color: var(--ink);
+        font:
+          0.78rem ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .control-row {
+        display: flex;
+        gap: 0.45rem;
+        margin-top: 0.6rem;
+      }
+
+      .control-row > * {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .control-row button,
+      .control-row select,
+      .control-row input {
+        min-height: 2.15rem;
+        padding: 0.42rem 0.55rem;
+        font-size: 0.76rem;
+      }
+
+      select,
+      input {
+        width: 100%;
+        border: 1px solid var(--line-strong);
+        border-radius: 0.55rem;
+        background: rgb(15 23 42 / 80%);
+        color: var(--ink);
+      }
+
+      input[type='number'] {
+        appearance: textfield;
+      }
+
+      .hint {
+        margin: 0.7rem 0 0;
+        color: var(--quiet);
+        font-size: 0.7rem;
+        line-height: 1.45;
+      }
+
+      .result {
+        min-height: 1.25rem;
+        margin: 0.7rem 0 0;
+        color: var(--muted);
+        font:
+          0.72rem ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+
+      .result[data-tone='positive'] {
+        color: var(--mint);
+      }
+
+      .result[data-tone='danger'] {
+        color: var(--rose);
+      }
+
+      .result[data-tone='info'] {
+        color: var(--blue);
+      }
+
+      .section-label {
+        margin: 1rem 0 0.45rem;
+        color: var(--quiet);
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .check-row {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        margin-top: 0.75rem;
+        color: var(--muted);
+        font-size: 0.75rem;
+      }
+
+      .check-row input {
+        width: auto;
+        accent-color: var(--blue);
+      }
+
+      .statusbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-top: auto;
+        padding: 0.7rem 1.25rem;
+        background: linear-gradient(0deg, rgb(8 11 18 / 92%), transparent);
+        color: var(--quiet);
+        font-size: 0.68rem;
+      }
+
+      .statusbar span:last-child {
+        color: var(--muted);
         font-family: ui-monospace, monospace;
       }
 
-      #cameraControls {
-        display: flex;
-        gap: 0.4rem;
-        margin-top: 0.65rem;
-      }
+      @media (max-width: 720px) {
+        .topbar {
+          padding-inline: 0.75rem;
+        }
 
-      #cameraControls button {
-        flex: 1;
-        border: 1px solid #475569;
-        border-radius: 0.35rem;
-        background: #172033;
-        color: #e2e8f0;
-        cursor: pointer;
-        padding: 0.35rem 0.45rem;
-      }
+        .lab-nav {
+          padding-inline: 0.75rem;
+        }
 
-      #cameraControls button:hover,
-      #cameraControls button:focus-visible {
-        border-color: #60a5fa;
-        outline: none;
-      }
+        .control-surface {
+          width: calc(100% - 1.5rem);
+          max-height: 62vh;
+          margin-right: 0.75rem;
+        }
 
-      #placementControls {
-        display: flex;
-        gap: 0.4rem;
-        margin-top: 0.45rem;
-      }
+        .statusbar {
+          padding-inline: 0.75rem;
+        }
 
-      #placementControls button {
-        flex: 1;
-        border: 1px solid #475569;
-        border-radius: 0.35rem;
-        background: #172033;
-        color: #e2e8f0;
-        cursor: pointer;
-        padding: 0.35rem 0.45rem;
-      }
-
-      #placementControls button:hover,
-      #placementControls button:focus-visible {
-        border-color: #34d399;
-        outline: none;
+        .statusbar span:first-child {
+          display: none;
+        }
       }
     </style>
   </head>
   <body>
-    <main id="app">
+    <main id="app" data-tessera-active-lab="camera">
       <canvas id="renderCanvas" aria-label="Tessera isometric viewport" tabindex="0"></canvas>
-      <output id="status" data-tessera-status="starting">Tessera starting</output>
-      <aside id="cameraLab" aria-label="Camera and coordinate laboratory">
-        <h2>Camera laboratory</h2>
-        <p>
-          Rotation <code id="cameraRotation">r0</code> · Zoom
-          <code id="cameraZoom">12.0 tiles</code>
-        </p>
-        <p>Target <code id="cameraTarget">0, 0, 0</code></p>
-        <p>Pointer cell <code id="pointerCell">—</code></p>
-        <p>Occupied cells <code id="occupiedCells">0</code></p>
-        <p>Selected entity <code id="selectedEntity">—</code></p>
-        <p>Screen bounds <code id="selectionBounds">—</code></p>
-        <p>Placement <code id="placementStatus">move over a cell</code></p>
-        <p>Drag to pan · wheel to zoom · <code>Q</code>/<code>E</code> to rotate</p>
-        <div id="cameraControls">
-          <button type="button" data-camera-action="rotate-left">Rotate left</button>
-          <button type="button" data-camera-action="focus-origin">Focus origin</button>
-          <button type="button" data-camera-action="rotate-right">Rotate right</button>
-        </div>
-        <div id="placementControls">
-          <button type="button" data-placement-action="place">Place at pointer</button>
-          <button type="button" data-placement-action="remove">Remove selected</button>
-        </div>
-      </aside>
+      <div class="shell">
+        <header class="topbar">
+          <div class="brand" aria-label="Tessera Scenario Lab">
+            <span class="brand-mark" aria-hidden="true">T</span>
+            <span class="brand-copy">
+              <strong>Tessera</strong>
+              <span>Scenario Lab</span>
+            </span>
+          </div>
+          <output id="status" data-testid="runtime-status" data-tessera-status="starting">
+            Tessera starting
+          </output>
+        </header>
+
+        <nav id="labNav" class="lab-nav" aria-label="Scenario laboratories">
+          <button type="button" data-lab-tab="camera" aria-selected="true">Camera</button>
+          <button type="button" data-lab-tab="placement" aria-selected="false">Placement</button>
+          <button type="button" data-lab-tab="entity-stress" aria-selected="false">
+            Entity stress
+          </button>
+          <button type="button" data-lab-tab="simulation-stress" aria-selected="false">
+            Simulation stress
+          </button>
+          <button type="button" data-lab-tab="boundary" aria-selected="false">Boundary</button>
+          <button type="button" data-lab-tab="persistence" aria-selected="false">
+            Persistence
+          </button>
+          <button type="button" data-lab-tab="museum" aria-selected="false">Visual museum</button>
+          <button type="button" data-lab-tab="errors" aria-selected="false">Errors</button>
+          <button type="button" data-lab-tab="lifecycle" aria-selected="false">Lifecycle</button>
+        </nav>
+
+        <aside class="control-surface" aria-label="Scenario Lab controls">
+          <section class="lab-panel" data-lab-panel="camera" data-active="true">
+            <div class="lab-heading">
+              <small>01 · Coordinate space</small>
+              <h1>Camera laboratory</h1>
+              <p>
+                Every readout below is derived from the public presentation camera and the current
+                render projection.
+              </p>
+            </div>
+            <div class="readout-grid">
+              <div class="readout"><span>Rotation</span><code id="cameraRotation">r0</code></div>
+              <div class="readout"><span>Zoom</span><code id="cameraZoom">12.0 tiles</code></div>
+              <div class="readout"><span>Target</span><code id="cameraTarget">0, 0, 0</code></div>
+              <div class="readout"><span>Pointer cell</span><code id="pointerCell">—</code></div>
+              <div class="readout"><span>Viewport</span><code id="cameraViewport">—</code></div>
+              <div class="readout"><span>Selected</span><code id="selectedEntity">—</code></div>
+              <div class="readout">
+                <span>Screen bounds</span><code id="selectionBounds">—</code>
+              </div>
+              <div class="readout">
+                <span>Occupied cells</span><code id="occupiedCells">0</code>
+              </div>
+            </div>
+            <div class="control-row">
+              <button type="button" data-camera-action="rotate-left">Rotate left</button>
+              <button type="button" data-camera-action="focus-origin">Focus origin</button>
+              <button type="button" data-camera-action="rotate-right">Rotate right</button>
+            </div>
+            <p class="hint">
+              Drag to pan · wheel to zoom · <code>Q</code>/<code>E</code> to rotate · click an
+              entity to select it.
+            </p>
+          </section>
+
+          <section class="lab-panel" data-lab-panel="placement">
+            <div class="lab-heading">
+              <small>02 · Authoritative grid</small>
+              <h1>Placement laboratory</h1>
+              <p>
+                Preview state is disposable. The Rust-backed query and command decide whether a
+                footprint can claim its cells.
+              </p>
+            </div>
+            <label class="section-label" for="placementObjectType">Object type</label>
+            <select id="placementObjectType" data-testid="placement-object-type"></select>
+            <div class="readout-grid">
+              <div class="readout">
+                <span>Footprint</span><code id="placementFootprint">1 cell</code>
+              </div>
+              <div class="readout"><span>Rotation</span><code id="placementRotation">r0</code></div>
+              <div class="readout">
+                <span>Pointer cell</span><code id="placementPointerCell">—</code>
+              </div>
+              <div class="readout">
+                <span>Validation</span><code id="placementStatus">move over a cell</code>
+              </div>
+            </div>
+            <div class="control-row">
+              <button type="button" data-placement-action="rotate-left">Rotate left</button>
+              <button type="button" data-placement-action="rotate-right">Rotate right</button>
+            </div>
+            <div class="control-row">
+              <button type="button" data-placement-action="place" data-tone="positive">
+                Place at pointer
+              </button>
+              <button type="button" data-placement-action="remove" data-tone="danger">
+                Remove selected
+              </button>
+            </div>
+            <p id="placementResult" class="result" data-testid="placement-result">
+              Move over a cell to ask Rust for a placement result.
+            </p>
+          </section>
+
+          <section class="lab-panel" data-lab-panel="entity-stress">
+            <div class="lab-heading">
+              <small>03 · Renderer scale</small>
+              <h1>Entity rendering stress</h1>
+              <p>
+                Populate a fixed field of ordinary Babylon instances, then inspect grouping,
+                mappings, and render cadence.
+              </p>
+            </div>
+            <label class="section-label" for="entityStressCount">Entities</label>
+            <select id="entityStressCount">
+              <option value="12">12 entities</option>
+              <option value="40">40 entities</option>
+              <option value="100">100 entities</option>
+            </select>
+            <div class="control-row">
+              <button type="button" data-stress-action="entities" data-tone="positive">
+                Populate field
+              </button>
+              <button type="button" data-stress-action="clear" data-tone="danger">
+                Clear field
+              </button>
+            </div>
+            <div class="readout-grid">
+              <div class="readout">
+                <span>Visible entities</span><code id="stressEntityCount">0</code>
+              </div>
+              <div class="readout">
+                <span>Visual groups</span><code id="stressGroupCount">0</code>
+              </div>
+              <div class="readout">
+                <span>Instances</span><code id="stressInstanceCount">0</code>
+              </div>
+              <div class="readout">
+                <span>Stale mappings</span><code id="stressStaleMappings">0</code>
+              </div>
+            </div>
+            <p id="stressResult" class="result">
+              Thin instances remain an experiment because selection outlines must remain reliable.
+            </p>
+          </section>
+
+          <section class="lab-panel" data-lab-panel="simulation-stress">
+            <div class="lab-heading">
+              <small>04 · Fixed ticks</small>
+              <h1>Simulation stress</h1>
+              <p>
+                Pause the host clock, advance exact bounded batches, and inspect the resulting
+                deterministic checkpoint.
+              </p>
+            </div>
+            <label class="section-label" for="simulationTickCount">Exact ticks</label>
+            <select id="simulationTickCount">
+              <option value="20">20 ticks</option>
+              <option value="100">100 ticks</option>
+              <option value="250">250 ticks</option>
+            </select>
+            <div class="control-row">
+              <button type="button" data-simulation-action="pause">Pause clock</button>
+              <button type="button" data-simulation-action="run" data-tone="positive">
+                Run exact ticks
+              </button>
+              <button type="button" data-simulation-action="resume">Resume</button>
+            </div>
+            <div class="readout-grid">
+              <div class="readout">
+                <span>Simulation tick</span><code id="simulationTick">0</code>
+              </div>
+              <div class="readout"><span>State hash</span><code id="simulationHash">—</code></div>
+              <div class="readout">
+                <span>Event sequence</span><code id="simulationEvents">0</code>
+              </div>
+              <div class="readout"><span>Clock</span><code id="simulationClock">running</code></div>
+            </div>
+            <p id="simulationResult" class="result">
+              Exact stepping is accepted only while the development clock is paused.
+            </p>
+          </section>
+
+          <section class="lab-panel" data-lab-panel="boundary">
+            <div class="lab-heading">
+              <small>05 · Worker / Wasm</small>
+              <h1>Boundary laboratory</h1>
+              <p>
+                Metrics describe the packed control plane and transferable render transport without
+                exposing mutable memory.
+              </p>
+            </div>
+            <div class="control-row">
+              <button type="button" data-boundary-action="refresh">Refresh metrics</button>
+              <button type="button" data-boundary-action="step">One exact tick</button>
+            </div>
+            <div class="readout-grid">
+              <div class="readout">
+                <span>Command calls</span><code id="metricCommandCalls">0</code>
+              </div>
+              <div class="readout">
+                <span>Command bytes</span><code id="metricCommandBytes">0 B</code>
+              </div>
+              <div class="readout">
+                <span>Render snapshots</span><code id="metricRenderSnapshots">0</code>
+              </div>
+              <div class="readout">
+                <span>Dropped snapshots</span><code id="metricDroppedSnapshots">0</code>
+              </div>
+              <div class="readout">
+                <span>Buffers in flight</span><code id="metricInFlightBuffers">0 / 0</code>
+              </div>
+              <div class="readout">
+                <span>Memory generation</span><code id="metricMemoryGeneration">0</code>
+              </div>
+              <div class="readout">
+                <span>View recreations</span><code id="metricViewRecreations">0</code>
+              </div>
+              <div class="readout"><span>Event gaps</span><code id="metricEventGaps">0</code></div>
+            </div>
+            <p id="boundaryResult" class="result" data-testid="boundary-result">
+              Waiting for Worker metrics.
+            </p>
+          </section>
+
+          <section class="lab-panel" data-lab-panel="persistence">
+            <div class="lab-heading">
+              <small>06 · Save contract</small>
+              <h1>Persistence laboratory</h1>
+              <p>
+                Save bytes are opaque to the browser. Validation and atomic world replacement happen
+                behind the runtime boundary.
+              </p>
+            </div>
+            <div class="control-row">
+              <button type="button" data-persistence-action="save" data-tone="positive">
+                Save current
+              </button>
+              <button type="button" data-persistence-action="load">Restore saved</button>
+              <button type="button" data-persistence-action="corrupt" data-tone="danger">
+                Corrupt import
+              </button>
+            </div>
+            <div class="readout-grid">
+              <div class="readout"><span>Saved bytes</span><code id="saveBytes">—</code></div>
+              <div class="readout"><span>Saved hash</span><code id="saveHash">—</code></div>
+              <div class="readout">
+                <span>World generation</span><code id="saveWorldGeneration">0</code>
+              </div>
+              <div class="readout"><span>Current hash</span><code id="currentHash">—</code></div>
+            </div>
+            <p id="persistenceResult" class="result" data-testid="persistence-result">
+              Create a save before attempting a restore or corruption check.
+            </p>
+          </section>
+
+          <section class="lab-panel" data-lab-panel="museum">
+            <div class="lab-heading">
+              <small>07 · Canonical scenes</small>
+              <h1>Visual museum</h1>
+              <p>
+                Fixed camera and seed controls make this small scene useful for screenshot review
+                and renderer regressions.
+              </p>
+            </div>
+            <div class="control-row">
+              <button type="button" data-museum-action="scene" data-tone="positive">
+                Load museum scene
+              </button>
+              <button type="button" data-museum-action="reset">Reset world</button>
+            </div>
+            <label class="check-row"
+              ><input id="overlayEnabled" type="checkbox" /> Show annotated overlay</label
+            >
+            <div class="control-row">
+              <button type="button" data-museum-action="capture">
+                Download reproduction manifest
+              </button>
+            </div>
+            <div class="readout-grid">
+              <div class="readout">
+                <span>World generation</span><code id="museumWorldGeneration">0</code>
+              </div>
+              <div class="readout">
+                <span>Snapshot generation</span><code id="museumSnapshotGeneration">0</code>
+              </div>
+              <div class="readout">
+                <span>Render frames</span><code id="museumRenderFrames">0</code>
+              </div>
+              <div class="readout">
+                <span>Reset count</span><code id="museumResetCount">0</code>
+              </div>
+            </div>
+            <p id="museumResult" class="result">
+              The museum scene uses no asset paths; it exercises the disposable renderer primitives.
+            </p>
+          </section>
+
+          <section class="lab-panel" data-lab-panel="errors">
+            <div class="lab-heading">
+              <small>08 · Recovery paths</small>
+              <h1>Error laboratory</h1>
+              <p>
+                Failures are expected inputs here. Each probe must be structured, deterministic, and
+                leave the active world intact.
+              </p>
+            </div>
+            <div class="control-row">
+              <button type="button" data-error-action="invalid-placement">Invalid placement</button>
+              <button type="button" data-error-action="unknown-entity">Unknown entity</button>
+              <button type="button" data-error-action="step-guard">Step guard</button>
+            </div>
+            <div class="readout-grid">
+              <div class="readout"><span>Last code</span><code id="errorCode">—</code></div>
+              <div class="readout"><span>Phase</span><code id="errorPhase">—</code></div>
+              <div class="readout"><span>Tick after probe</span><code id="errorTick">0</code></div>
+              <div class="readout">
+                <span>World preserved</span><code id="errorPreserved">—</code>
+              </div>
+            </div>
+            <p id="errorResult" class="result" data-testid="error-result">
+              Choose a controlled failure to inspect its structured result.
+            </p>
+          </section>
+
+          <section class="lab-panel" data-lab-panel="lifecycle">
+            <div class="lab-heading">
+              <small>09 · Ownership</small>
+              <h1>Lifecycle laboratory</h1>
+              <p>
+                Reset the same runtime repeatedly and verify generation changes without stale
+                mappings or leaked presentation state.
+              </p>
+            </div>
+            <label class="section-label" for="lifecycleCycles">Reset cycles</label>
+            <select id="lifecycleCycles">
+              <option value="1">1 cycle</option>
+              <option value="3">3 cycles</option>
+              <option value="5">5 cycles</option>
+            </select>
+            <div class="control-row">
+              <button type="button" data-lifecycle-action="run" data-tone="positive">
+                Run reset cycles
+              </button>
+              <button type="button" data-lifecycle-action="reset">Reset once</button>
+            </div>
+            <div class="readout-grid">
+              <div class="readout">
+                <span>Cycles observed</span><code id="lifecycleCyclesObserved">0</code>
+              </div>
+              <div class="readout">
+                <span>World generation</span><code id="lifecycleWorldGeneration">0</code>
+              </div>
+              <div class="readout">
+                <span>Stale mappings</span><code id="lifecycleStaleMappings">0</code>
+              </div>
+              <div class="readout"><span>Bridge</span><code id="lifecycleBridge">—</code></div>
+            </div>
+            <p id="lifecycleResult" class="result">
+              The runtime owns the Worker, renderer, listeners, and development facade until page
+              shutdown.
+            </p>
+          </section>
+        </aside>
+
+        <footer class="statusbar" aria-live="polite">
+          <span id="labContext"
+            >Rust state · disposable Babylon projection · deterministic controls</span
+          >
+          <span id="telemetry" data-tessera-status="starting">sim 0 · render 0 · generation 0</span>
+        </footer>
+      </div>
     </main>
     <script type="module" src="./src/main.ts"></script>
   </body>

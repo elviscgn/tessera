@@ -53,7 +53,7 @@ flowchart LR
 | **Persistence**          | Rust-owned versioned JSON saves, checksums, identity validation, atomic loads, replay metadata, and browser adapters |
 | **Diagnostics**          | Development-only test bridge, deterministic waits, annotated snapshot captures, and reproduction manifests           |
 
-The authoritative grid, occupancy model, selection path, declarative placement flow, grouped renderer projection, and v0.1 persistence boundary are now in place. The wider consumer-facing scenario API and the full Scenario Lab remain in development.
+The authoritative grid, occupancy model, selection path, declarative placement flow, grouped renderer projection, persistence boundary, and Scenario Lab laboratories are now in place. The wider consumer-facing scenario API and browser regression suite continue to grow around this foundation.
 
 ## Saving and loading
 
@@ -75,10 +75,10 @@ console.log(restored.tick, restored.stateHashHex);
 ## Running in the browser
 
 <p align="center">
-  <img src="docs/assets/scenario-lab-foundation.jpg" alt="Tessera Scenario Lab showing a Babylon.js render and a successful probe at tick 1" width="900">
+  <img src="docs/assets/scenario-lab-foundation.jpg" alt="Tessera Scenario Lab showing a Babylon.js render and the foundation probe" width="900">
 </p>
 
-<p align="center"><em>The current foundation probe: a Babylon.js scene rendered from the Worker/Wasm runtime, with the Rust-backed command round trip completing at tick 1.</em></p>
+<p align="center"><em>The Scenario Lab is a deterministic workbench for camera, placement, renderer scale, persistence, diagnostics, and lifecycle checks.</em></p>
 
 ## Quick start
 

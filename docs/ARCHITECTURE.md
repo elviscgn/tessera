@@ -124,7 +124,7 @@ The camera is a right-handed orthographic projection aligned with glTF. `+X` is 
 
 ## Current implementation
 
-Milestones 3 through 9 provide the lifecycle, camera, occupancy, selection, placement, scalable-renderer, and persistence foundation:
+Milestones 3 through 11 provide the lifecycle, camera, occupancy, selection, placement, scalable-renderer, persistence, observability, and Scenario Lab foundation:
 
 - `FoundationRuntime` owns one Worker, one renderer, listeners, pending requests, readiness, diagnostics, selection subscriptions, deterministic waits, and disposal;
 - `BabylonRenderer` creates a WebGL2 engine, right-handed scene, camera, light, the foundation overlays, and slot/generation-keyed entity visuals;
@@ -139,6 +139,7 @@ Milestones 3 through 9 provide the lifecycle, camera, occupancy, selection, plac
 - entity snapshots reconcile by slot, generation, and visual type; ordinary instances are grouped under disposable visual templates and removed when absent from the newest snapshot;
 - world-generation resets clear the renderer projection atomically, while stale world/snapshot generations and stale slot mappings are visible in renderer diagnostics.
 - `renderInspection()` retains defensive copies of the latest validated snapshot, entity records, and occupied cells for the development test surface; loading or disposing the runtime clears that inspection state before a new generation is accepted.
+- Scenario Lab is a vanilla DOM consumer of the public runtime and development testkit. Its nine laboratories use fixed seeds, declarative object definitions, exact tick controls, and structured readouts rather than a parallel simulation store.
 
 ## Observability
 
@@ -148,7 +149,7 @@ outside the default runtime entry point. Browser checks can therefore exercise
 the same public command and query path as a consumer without shipping a test
 global or a raw mutation escape hatch.
 
-The public entry point currently exposes lifecycle/readiness primitives, the presentation camera model, stable selection IDs, canvas picking, screen-space bounds, declarative object definitions, Rust-backed placement queries and commands, persistence adapters, save/load methods, and synchronization waits. The development test bridge and wider consumer-facing scenario API are added in later milestones.
+The public entry point currently exposes lifecycle/readiness primitives, the presentation camera model and action layer, canvas viewport helpers, stable selection IDs, canvas picking, screen-space bounds, declarative object definitions, Rust-backed placement queries and commands, persistence adapters, save/load methods, and synchronization waits. The development test bridge remains an explicit secondary entry point; a wider consumer-facing scenario API is still a later milestone.
 
 ## Placement flow
 
