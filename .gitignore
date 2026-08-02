@@ -150,3 +150,6 @@ vite.config.ts.timestamp-*
 test-results/
 playwright-report/
 blob-report/
+
+# Performance reports are generated locally or uploaded by scheduled jobs.
+artifacts/performance/

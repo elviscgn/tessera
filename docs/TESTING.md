@@ -120,6 +120,26 @@ run the documented compatibility smoke only. Update a baseline with
 `pnpm test:visual:update` only when the structured assertions still pass and a
 review includes the old and new artifacts.
 
+## Performance and cleanup
+
+Performance measurements are deliberately separate from the pull-request
+correctness gate:
+
+```
+pnpm perf:native
+pnpm perf:browser
+pnpm perf:native:check
+```
+
+The native command measures deterministic ticks, hashing, save/load, and
+serialization. The browser command uses the Scenario Lab testkit to measure
+population, exact ticks, save/load, transferable metrics, and repeated reset
+cycles. Reports include raw samples, medians, p95 values, runner metadata, and
+structured cleanup checks. See [Performance](PERFORMANCE.md) for the baseline
+policy and the scheduled workflow. Add `--fail-on-regression` after the
+comparison command only when a reviewed like-for-like regression gate is
+intended.
+
 ## Test discipline
 
 Prefer deterministic fixtures and explicit readiness or tick waits. Do not replace a failing assertion with a sleep, silently update a baseline, disable strict checks, or delete coverage to make a build green. If a failure points to an architectural decision, document the decision rather than hiding the symptom.

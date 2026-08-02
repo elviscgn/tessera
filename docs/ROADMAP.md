@@ -18,10 +18,11 @@ Tessera is delivered in small checkpoints so each release keeps a clear, reviewa
 - **Milestone 10 — diagnostics and reproduction:** the development test facade, deterministic waits, annotated overlay captures, defensive render inspection, and versioned reproduction manifests.
 - **Milestone 11 — Scenario Lab:** nine deterministic laboratories for camera, placement, renderer scale, exact ticks, boundary metrics, persistence, visual scenes, structured failures, and lifecycle resets.
 - **Milestone 12 — browser regression:** pinned Playwright flows, canonical Chromium museum visuals, production bridge exclusion smoke, and Firefox/WebKit compatibility smoke.
+- **Milestone 13 — performance and cleanup:** native/browser harnesses, lifecycle checks, recorded baselines, and evidence gates for optimization.
 
 ## Next
 
-**Milestone 13 — performance and cleanup** is the next implementation checkpoint. It will add native/browser harnesses, lifecycle and leak checks, recorded baselines, and optimization evidence.
+**Milestone 14 — external consumer proof** is the next implementation checkpoint. It will validate the packed artifact from outside the workspace.
 
 ## Planned checkpoints
 

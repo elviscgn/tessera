@@ -1,0 +1,126 @@
+{
+  "notes": [
+    "Recorded on the local macOS aarch64 runner during Milestone 13.",
+    "Timings are observations for trend comparison, not release budgets.",
+    "Compare only like-for-like runner and workload settings."
+  ],
+  "runner": {
+    "arch": "aarch64",
+    "family": "unix",
+    "os": "macos"
+  },
+  "samples": [
+    {
+      "canonicalStateBytes": 217841,
+      "entityCount": 256,
+      "hashMs": 0.578,
+      "loadMs": 98.077167,
+      "occupiedCellCount": 256,
+      "saveBytes": 11757135,
+      "saveMs": 76.163041,
+      "spawnMs": 1.188458,
+      "tickMs": 41.69025,
+      "ticksPerSecond": 2398.6423684194747,
+      "totalMs": 217.925959
+    },
+    {
+      "canonicalStateBytes": 217841,
+      "entityCount": 256,
+      "hashMs": 0.530208,
+      "loadMs": 82.5955,
+      "occupiedCellCount": 256,
+      "saveBytes": 11757135,
+      "saveMs": 54.443625,
+      "spawnMs": 0.094916,
+      "tickMs": 13.457833,
+      "ticksPerSecond": 7430.616801382511,
+      "totalMs": 151.198666
+    },
+    {
+      "canonicalStateBytes": 217841,
+      "entityCount": 256,
+      "hashMs": 0.355792,
+      "loadMs": 97.367875,
+      "occupiedCellCount": 256,
+      "saveBytes": 11757135,
+      "saveMs": 48.327666,
+      "spawnMs": 0.093541,
+      "tickMs": 12.796791,
+      "ticksPerSecond": 7814.459109318891,
+      "totalMs": 159.004333
+    },
+    {
+      "canonicalStateBytes": 217841,
+      "entityCount": 256,
+      "hashMs": 0.366208,
+      "loadMs": 83.38475,
+      "occupiedCellCount": 256,
+      "saveBytes": 11757135,
+      "saveMs": 52.634834,
+      "spawnMs": 0.124458,
+      "tickMs": 14.53,
+      "ticksPerSecond": 6882.312456985547,
+      "totalMs": 151.315
+    },
+    {
+      "canonicalStateBytes": 217841,
+      "entityCount": 256,
+      "hashMs": 0.547,
+      "loadMs": 82.610583,
+      "occupiedCellCount": 256,
+      "saveBytes": 11757135,
+      "saveMs": 52.44075,
+      "spawnMs": 0.088583,
+      "tickMs": 12.487792,
+      "ticksPerSecond": 8007.820758065157,
+      "totalMs": 148.258667
+    }
+  ],
+  "schema": "tessera.performance.native",
+  "schemaVersion": 1,
+  "state": {
+    "entityCount": 256,
+    "occupiedCellCount": 256,
+    "stateHashHex": "674f20461440b44d01852e9d3b62142669939cb98fc1584b80b052599721d6eb",
+    "tick": 101
+  },
+  "summary": {
+    "hashMs": {
+      "median": 0.530208,
+      "p95": 0.5718
+    },
+    "loadMs": {
+      "median": 83.38475,
+      "p95": 97.9353086
+    },
+    "saveMs": {
+      "median": 52.634834,
+      "p95": 71.8191578
+    },
+    "spawnMs": {
+      "median": 0.094916,
+      "p95": 0.975658
+    },
+    "tickMs": {
+      "median": 13.457833,
+      "p95": 36.2582
+    },
+    "ticksPerSecond": {
+      "median": 7430.616801382511,
+      "p95": 7969.148428315903
+    },
+    "totalMs": {
+      "median": 151.315,
+      "p95": 206.1416338
+    }
+  },
+  "workload": {
+    "entities": 256,
+    "objectType": "performance/foundation",
+    "samples": 5,
+    "seedHex": "0707070707070707070707070707070707070707070707070707070707070707",
+    "tickRateHz": 20,
+    "ticks": 100,
+    "warmup": 1
+  }
+}
