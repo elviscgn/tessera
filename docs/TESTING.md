@@ -83,7 +83,7 @@ The probe uses structured `data-tessera-*` attributes so browser tests can asser
 1d58e8e0cf937e92279a5206ca3d4e8d24b046b9545568695bc262dd0ed4967c
 ```
 
-The render probe also validates the authoritative occupied-cell region, entity transform regions, and their typed-array decoders. Unit coverage rejects malformed entity layouts, duplicate slots, invalid generations, and stale selection handles. Browser smoke selects the rendered probe entity and checks that its `slot:generation` ID and canvas-relative bounds appear in the lab. Persistence tests exercise the public adapter boundary and the Worker save/load responses. Visual regression, Firefox/WebKit smoke coverage, and full browser flows are the next milestone; the development bridge is already covered by the Scenario Lab and its unit contract tests.
+The render probe also validates the authoritative occupied-cell region, entity transform regions, and their typed-array decoders. Unit coverage rejects malformed entity layouts, duplicate slots, invalid generations, and stale selection handles. Browser smoke selects the rendered probe entity and checks that its `slot:generation` ID and canvas-relative bounds appear in the lab. Persistence tests exercise the public adapter boundary and the Worker save/load responses. The Playwright flow, canonical Chromium visual, production, Firefox, and WebKit gates are the M12 browser release checks; the development bridge remains covered by the Scenario Lab and its unit contract tests.
 
 Renderer reconciliation has pure unit coverage for slot updates, missing-entity removals, generation replacement, visual-type regrouping, newer-world resets, and stale snapshot rejection. Renderer diagnostics expose visual-group count, instance count, reset count, stale mapping count, and stale snapshot count so a browser stress run can prove that dropped or late projections do not resurrect presentation state.
 
@@ -95,7 +95,30 @@ is enough for a native tool to validate the scenario and replay inputs.
 
 ## Visual tests
 
-The visual museum is intentionally small. A canonical Chromium run fixes the browser revision, viewport, device-pixel ratio, camera, seed, tick, render generation, animation time, fonts, graphics backend, and quality settings. A baseline update needs a reason, before/after artifacts, and unchanged structured state assertions.
+The visual museum is intentionally small. CI runs the pinned Playwright
+1.60.0 container and its browser revisions; the canonical Chromium project
+fixes the viewport, device-pixel ratio, locale, timezone, camera, seed, tick,
+render generation, animation time, graphics backend, and quality settings. A
+baseline update needs a reason, before/after artifacts, and unchanged
+structured state assertions.
+
+Run the browser gates locally after installing the pinned browser revisions:
+
+```sh
+pnpm exec playwright install chromium firefox webkit
+pnpm test:e2e
+pnpm test:visual
+pnpm test:e2e:production
+pnpm test:e2e:compat
+```
+
+The first command exercises the complete Chromium Scenario Lab flow. Visual
+tests compare the committed museum baseline and retain screenshots, traces,
+videos, and HTML reports when a run fails. Production smoke builds the Vite
+shell and verifies that the development bridge is absent. Firefox and WebKit
+run the documented compatibility smoke only. Update a baseline with
+`pnpm test:visual:update` only when the structured assertions still pass and a
+review includes the old and new artifacts.
 
 ## Test discipline
 

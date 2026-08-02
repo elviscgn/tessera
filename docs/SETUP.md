@@ -69,3 +69,21 @@ The repository gate runs, in order:
 The generated Worker module under `src/worker/wasm` is checked in because it is an application input. Rebuild it with `pnpm check:wasm`; if the output changes, inspect the diff before committing.
 
 Keep `pnpm-lock.yaml` and `rust/Cargo.lock` committed. Clean environments should use `pnpm install --frozen-lockfile` so dependency resolution does not drift.
+
+## Browser release gates
+
+Install the browser revisions selected by Playwright 1.60.0 before running the
+browser suites locally. CI uses the pinned `mcr.microsoft.com/playwright:v1.60.0-noble`
+container so visual baselines are produced on the same Linux image every time:
+
+```sh
+pnpm exec playwright install chromium firefox webkit
+pnpm test:e2e
+pnpm test:visual
+pnpm test:e2e:production
+pnpm test:e2e:compat
+```
+
+The complete Chromium flow and visual museum are the primary release checks.
+Production smoke verifies that the development test bridge is absent, while
+Firefox and WebKit run the documented compatibility smoke.

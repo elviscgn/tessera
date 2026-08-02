@@ -145,3 +145,8 @@ rust/target/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Playwright outputs
+test-results/
+playwright-report/
+blob-report/

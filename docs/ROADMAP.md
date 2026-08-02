@@ -17,10 +17,11 @@ Tessera is delivered in small checkpoints so each release keeps a clear, reviewa
 - **Milestone 9 — persistence and replay:** versioned Rust-owned saves, checksum and identity validation, atomic loads, browser persistence adapters, golden fixtures, and native/Wasm replay parity.
 - **Milestone 10 — diagnostics and reproduction:** the development test facade, deterministic waits, annotated overlay captures, defensive render inspection, and versioned reproduction manifests.
 - **Milestone 11 — Scenario Lab:** nine deterministic laboratories for camera, placement, renderer scale, exact ticks, boundary metrics, persistence, visual scenes, structured failures, and lifecycle resets.
+- **Milestone 12 — browser regression:** pinned Playwright flows, canonical Chromium museum visuals, production bridge exclusion smoke, and Firefox/WebKit compatibility smoke.
 
 ## Next
 
-**Milestone 12 — Playwright and visual regression** is the next implementation checkpoint. It will add complete scripted flows, canonical Chromium baselines, production smoke, and Firefox/WebKit compatibility smoke.
+**Milestone 13 — performance and cleanup** is the next implementation checkpoint. It will add native/browser harnesses, lifecycle and leak checks, recorded baselines, and optimization evidence.
 
 ## Planned checkpoints
 
