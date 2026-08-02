@@ -25,6 +25,10 @@ These rules keep the simulation deterministic, the browser boundary understandab
 - Keep deterministic logic out of browser clocks, locale-sensitive APIs, random browser helpers, and unstable iteration order.
 - Keep visual interpolation and UI state separate from the state hash.
 - Treat selection, camera state, screen bounds, and pointer coordinates as presentation state; they never become commands implicitly.
+- Treat placement previews as presentation state. A preview may be marked valid only from a Rust placement query, and the authoritative command must validate again.
+- Keep public object IDs stable strings. TypeScript may normalize startup declarations, but Rust assigns handles and owns footprints, occupancy, and rejection decisions.
+- Reconcile render records by slot, generation, and visual type. Use disposable ordinary instances grouped by visual type; never allocate public entity-ID strings in a per-entity snapshot update.
+- Treat world-generation changes as a renderer reset boundary. Ignore older snapshots, clear stale mappings, and expose the resulting counters through diagnostics.
 
 ## Dependencies and tests
 
@@ -37,4 +41,4 @@ These rules keep the simulation deterministic, the browser boundary understandab
 
 Keep a change limited to one coherent milestone or maintenance task. Do not mix unrelated cleanup into feature work. Review generated Wasm and lockfile changes deliberately.
 
-The current implementation scope includes the Babylon lifecycle, the Worker readiness bridge, the orthographic camera model, named camera actions, coordinate conversion, authoritative grid occupancy, the debug-grid projection, slot/generation selection, deterministic waits, diagnostics, and their tests. React, persistence, gameplay systems, and the test bridge belong to later milestones.
+The current implementation scope includes the Babylon lifecycle, the Worker readiness bridge, the orthographic camera model, named camera actions, coordinate conversion, authoritative grid occupancy, declarative object registration, Rust-backed placement queries and commands, the debug-grid projection, slot/generation selection, deterministic waits, diagnostics, and their tests. React, persistence, gameplay systems, and the test bridge belong to later milestones.

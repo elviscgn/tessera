@@ -6,7 +6,6 @@ import {
   type ScreenBounds,
 } from '../../../src/public/index';
 import { CameraActionLayer } from '../../../src/input/camera-action-layer';
-import { encodeSpawnCommandBatch } from '../../../src/worker/bridge-protocol';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#renderCanvas');
 const status = document.querySelector<HTMLOutputElement>('#status');
@@ -18,6 +17,8 @@ const pointerCell = document.querySelector<HTMLElement>('#pointerCell');
 const occupiedCells = document.querySelector<HTMLElement>('#occupiedCells');
 const selectedEntity = document.querySelector<HTMLElement>('#selectedEntity');
 const selectionBounds = document.querySelector<HTMLElement>('#selectionBounds');
+const placementStatus = document.querySelector<HTMLElement>('#placementStatus');
+const placementButtons = document.querySelectorAll<HTMLButtonElement>('[data-placement-action]');
 const cameraButtons = document.querySelectorAll<HTMLButtonElement>('[data-camera-action]');
 
 if (
@@ -30,7 +31,8 @@ if (
   !pointerCell ||
   !occupiedCells ||
   !selectedEntity ||
-  !selectionBounds
+  !selectionBounds ||
+  !placementStatus
 ) {
   throw new Error('The Scenario Lab foundation mount is missing.');
 }
@@ -151,7 +153,11 @@ const setSelectionLab = (runtime: FoundationRuntime, entityId: string | undefine
 };
 
 try {
-  const runtime = createFoundationRuntime({ canvas });
+  const runtime = createFoundationRuntime({
+    canvas,
+    scenario: { id: 'foundation' },
+    objectTypes: [{ id: 'foundation' }],
+  });
   const unsubscribe = runtime.subscribeDiagnostics((diagnostics) => {
     setDiagnostics(diagnostics);
     setCameraLab(runtime);
@@ -173,6 +179,44 @@ try {
     setSelectionLab(runtime, entityId);
   });
 
+  let latestCell: { x: number; z: number } | undefined;
+  let latestPreviewKey = '';
+
+  const setPointerCell = (cell: { x: number; z: number } | undefined): void => {
+    pointerCell.textContent = cell === undefined ? '—' : `${cell.x}, ${cell.z}`;
+    telemetry.dataset.tesseraPointerCell = cell === undefined ? '' : `${cell.x},${cell.z}`;
+  };
+
+  const updatePlacementPreview = (cell: { x: number; z: number } | undefined): void => {
+    if (cell === undefined) {
+      runtime.clearPlacementPreview();
+      placementStatus.textContent = '—';
+      return;
+    }
+    const target = {
+      objectType: 'foundation',
+      x: cell.x,
+      z: cell.z,
+      elevationMm: 0,
+      rotation: runtime.camera.state.rotation,
+    };
+    const key = `${target.x}:${target.z}:${target.rotation}`;
+    if (key === latestPreviewKey) {
+      return;
+    }
+    latestPreviewKey = key;
+    void runtime
+      .previewPlacement(target)
+      .then((result) => {
+        placementStatus.textContent = result.valid
+          ? `available · ${result.occupiedCellCount} cell`
+          : `blocked · reason ${result.rejectionCode ?? 'unknown'}`;
+      })
+      .catch(() => {
+        placementStatus.textContent = 'preview unavailable';
+      });
+  };
+
   const pointerMove = (event: PointerEvent): void => {
     const bounds = canvas.getBoundingClientRect();
     const cell = runtime.camera.screenToGrid(
@@ -180,12 +224,15 @@ try {
       viewport(),
       0,
     );
-    pointerCell.textContent = cell === undefined ? '—' : `${cell.x}, ${cell.z}`;
-    telemetry.dataset.tesseraPointerCell = cell === undefined ? '' : `${cell.x},${cell.z}`;
+    setPointerCell(cell);
+    latestCell = cell;
+    updatePlacementPreview(cell);
   };
   const pointerLeave = (): void => {
-    pointerCell.textContent = '—';
-    telemetry.dataset.tesseraPointerCell = '';
+    latestCell = undefined;
+    latestPreviewKey = '';
+    setPointerCell(undefined);
+    updatePlacementPreview(undefined);
   };
   canvas.addEventListener('pointermove', pointerMove);
   canvas.addEventListener('pointerleave', pointerLeave);
@@ -209,19 +256,70 @@ try {
     buttonListeners.push({ button, listener });
   }
 
+  const placementButtonListeners: Array<{
+    readonly button: HTMLButtonElement;
+    readonly listener: () => void;
+  }> = [];
+  const placeAtPointer = (): void => {
+    if (latestCell === undefined) {
+      return;
+    }
+    void runtime
+      .placeObject({
+        objectType: 'foundation',
+        x: latestCell.x,
+        z: latestCell.z,
+        elevationMm: 0,
+        rotation: runtime.camera.state.rotation,
+      })
+      .then(() => {
+        placementStatus.textContent = 'placed';
+      })
+      .catch(() => {
+        placementStatus.textContent = 'placement rejected';
+      });
+  };
+  const removeSelected = (): void => {
+    const entityId = runtime.selectedEntity();
+    if (entityId === undefined) {
+      return;
+    }
+    void runtime
+      .removeEntity(entityId)
+      .then(() => {
+        placementStatus.textContent = 'removal submitted';
+      })
+      .catch(() => {
+        placementStatus.textContent = 'removal rejected';
+      });
+  };
+  const placementActions: Record<string, () => void> = {
+    place: placeAtPointer,
+    remove: removeSelected,
+  };
+  const refreshPlacementPreview = (): void => {
+    if (latestCell !== undefined) {
+      updatePlacementPreview(latestCell);
+    }
+  };
+  const unsubscribePlacementCamera = runtime.camera.subscribe(refreshPlacementPreview);
+  for (const button of placementButtons) {
+    const action = button.dataset.placementAction;
+    const listener = (): void => placementActions[action ?? '']?.();
+    button.addEventListener('click', listener);
+    placementButtonListeners.push({ button, listener });
+  }
+
   void runtime.ready
     .then(async (ready) => {
       setStatus('ready', { tick: String(ready.tick) });
-      const command = encodeSpawnCommandBatch({
-        batchSequence: 1n,
-        clientSequence: 1n,
-        objectType: 1,
+      const response = await runtime.placeObject({
+        objectType: 'foundation',
         x: 0,
         z: 0,
         elevationMm: 0,
         rotation: 0,
       });
-      const response = await runtime.submitCommand(command, 1);
       setStatus('probe-passed', {
         tick: String(response.tick),
         stateHash: response.stateHashHex,
@@ -236,11 +334,15 @@ try {
     unsubscribe();
     unsubscribeCamera();
     unsubscribeSelection();
+    unsubscribePlacementCamera();
     actionLayer.dispose();
     selectionLayer.dispose();
     canvas.removeEventListener('pointermove', pointerMove);
     canvas.removeEventListener('pointerleave', pointerLeave);
     for (const { button, listener } of buttonListeners) {
+      button.removeEventListener('click', listener);
+    }
+    for (const { button, listener } of placementButtonListeners) {
       button.removeEventListener('click', listener);
     }
     runtime.dispose();

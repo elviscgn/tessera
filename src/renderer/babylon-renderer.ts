@@ -6,10 +6,13 @@ import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import type { LinesMesh } from '@babylonjs/core/Meshes/linesMesh';
+import type { Mesh } from '@babylonjs/core/Meshes/mesh';
+import type { InstancedMesh } from '@babylonjs/core/Meshes/instancedMesh';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Scene } from '@babylonjs/core/scene';
 import '@babylonjs/core/Culling/ray';
+import '@babylonjs/core/Rendering/outlineRenderer';
 import './register-loaders.js';
 import type {
   RenderEntityRecord,
@@ -17,6 +20,12 @@ import type {
   RenderSnapshotMetadata,
 } from '../worker/data-protocol';
 import { CameraProjection, type CameraViewport } from './isometric-camera';
+import type { PlacementPreview } from '../public/runtime-types';
+import {
+  reconcileVisualMappings,
+  type VisualMapping,
+  type VisualReconciliationOperation,
+} from './visual-reconciliation';
 import {
   boundsFromPoints,
   formatEntityId,
@@ -31,11 +40,16 @@ export interface RendererDiagnostics {
   readonly renderFrames: number;
   readonly receivedSnapshots: number;
   readonly lastSnapshotGeneration: bigint;
+  readonly lastWorldGeneration: number;
   readonly lastSimulationTick: bigint;
   readonly lastEntityCount: number;
   readonly occupiedCellCount?: number;
   readonly visibleEntityCount?: number;
   readonly staleMappingCount?: number;
+  readonly staleSnapshotCount?: number;
+  readonly resetCount?: number;
+  readonly visualGroupCount?: number;
+  readonly instanceCount?: number;
   readonly selectedEntityId?: EntityId;
   readonly disposed: boolean;
 }
@@ -43,7 +57,8 @@ export interface RendererDiagnostics {
 type EntityVisual = {
   readonly slot: number;
   generation: number;
-  readonly mesh: ReturnType<typeof MeshBuilder.CreateBox>;
+  visualType: number;
+  readonly mesh: InstancedMesh;
 };
 
 type SelectionListener = (entityId: EntityId | undefined) => void;
@@ -60,12 +75,13 @@ export class BabylonRenderer {
   private readonly scene: Scene;
   private readonly camera: FreeCamera;
   private readonly light: HemisphericLight;
-  private readonly placeholder: ReturnType<typeof MeshBuilder.CreateBox>;
-  private readonly placeholderMaterial: StandardMaterial;
   private readonly entityMaterial: StandardMaterial;
-  private readonly selectedMaterial: StandardMaterial;
+  private readonly selectionOutlineColor: Color3;
   private readonly debugGridMaterial: StandardMaterial;
   private readonly occupiedMaterial: StandardMaterial;
+  private readonly placementValidMaterial: StandardMaterial;
+  private readonly placementInvalidMaterial: StandardMaterial;
+  private readonly placementPreview: ReturnType<typeof MeshBuilder.CreateBox>;
   private readonly cameraProjection: CameraProjection;
   private readonly unsubscribeCamera: () => void;
   private debugGrid: LinesMesh | undefined;
@@ -79,11 +95,16 @@ export class BabylonRenderer {
   private renderFrames = 0;
   private receivedSnapshots = 0;
   private lastSnapshotGeneration = 0n;
+  private lastWorldGeneration: number | undefined;
   private lastSimulationTick = 0n;
   private lastEntityCount = 0;
   private lastOccupiedCellCount = 0;
   private staleMappingCount = 0;
+  private staleSnapshotCount = 0;
+  private resetCount = 0;
   private selectedEntityId: EntityId | undefined;
+  private readonly visualTemplates = new Map<number, Mesh>();
+  private selectedEntityHandle: { readonly slot: number; readonly generation: number } | undefined;
 
   private readonly renderFrame = (): void => {
     if (!this.disposed) {
@@ -132,28 +153,9 @@ export class BabylonRenderer {
     );
     this.light.intensity = 0.9;
 
-    this.placeholder = MeshBuilder.CreateBox(
-      'tessera-foundation-placeholder',
-      { size: 1 },
-      this.scene,
-    );
-    this.placeholder.position.y = 0.5;
-    this.placeholderMaterial = new StandardMaterial(
-      'tessera-foundation-placeholder-material',
-      this.scene,
-    );
-    this.placeholderMaterial.diffuseColor = new Color3(0.22, 0.62, 0.92);
-    this.placeholder.material = this.placeholderMaterial;
-    this.placeholder.isPickable = false;
-
     this.entityMaterial = new StandardMaterial('tessera-foundation-entity-material', this.scene);
     this.entityMaterial.diffuseColor = new Color3(0.22, 0.62, 0.92);
-    this.selectedMaterial = new StandardMaterial(
-      'tessera-foundation-selected-material',
-      this.scene,
-    );
-    this.selectedMaterial.diffuseColor = new Color3(1, 0.68, 0.2);
-    this.selectedMaterial.emissiveColor = new Color3(0.35, 0.16, 0.02);
+    this.selectionOutlineColor = new Color3(1, 0.68, 0.2);
 
     this.debugGridMaterial = new StandardMaterial('tessera-foundation-grid-material', this.scene);
     this.debugGridMaterial.emissiveColor = new Color3(0.12, 0.2, 0.3);
@@ -167,6 +169,30 @@ export class BabylonRenderer {
     this.occupiedMaterial.emissiveColor = new Color3(0.25, 0.08, 0.02);
     this.occupiedMaterial.alpha = 0.32;
     this.occupiedMaterial.disableLighting = true;
+
+    this.placementValidMaterial = new StandardMaterial(
+      'tessera-placement-valid-material',
+      this.scene,
+    );
+    this.placementValidMaterial.diffuseColor = new Color3(0.3, 0.9, 0.5);
+    this.placementValidMaterial.emissiveColor = new Color3(0.06, 0.3, 0.12);
+    this.placementValidMaterial.alpha = 0.42;
+    this.placementValidMaterial.disableLighting = true;
+    this.placementInvalidMaterial = new StandardMaterial(
+      'tessera-placement-invalid-material',
+      this.scene,
+    );
+    this.placementInvalidMaterial.diffuseColor = new Color3(0.95, 0.3, 0.25);
+    this.placementInvalidMaterial.emissiveColor = new Color3(0.3, 0.05, 0.03);
+    this.placementInvalidMaterial.alpha = 0.42;
+    this.placementInvalidMaterial.disableLighting = true;
+    this.placementPreview = MeshBuilder.CreateBox(
+      'tessera-placement-preview',
+      { size: 1 },
+      this.scene,
+    );
+    this.placementPreview.isPickable = false;
+    this.placementPreview.isVisible = false;
 
     this.unsubscribeCamera = this.cameraProjection.subscribe(this.syncCamera);
 
@@ -192,16 +218,40 @@ export class BabylonRenderer {
     snapshot: RenderSnapshotMetadata,
     occupiedCells: readonly RenderGridCell[] = [],
     entities: readonly RenderEntityRecord[] = [],
-  ): void {
+  ): boolean {
     if (this.disposed) {
       throw new Error('tessera:renderer:disposed:cannot consume a snapshot after disposal');
     }
     this.receivedSnapshots += 1;
+    const reconciliation = reconcileVisualMappings(
+      {
+        worldGeneration: this.lastWorldGeneration,
+        snapshotGeneration: this.lastSnapshotGeneration,
+        mappings: [...this.entityVisuals.values()].map((visual): VisualMapping => ({
+          slot: visual.slot,
+          generation: visual.generation,
+          visualType: visual.visualType,
+        })),
+      },
+      snapshot,
+      entities,
+    );
+    if (!reconciliation.applied) {
+      this.staleSnapshotCount += 1;
+      return false;
+    }
+    if (reconciliation.reset) {
+      this.resetVisuals();
+      this.resetCount += 1;
+    }
     this.lastSnapshotGeneration = snapshot.snapshotGeneration;
+    this.lastWorldGeneration = snapshot.worldGeneration;
     this.lastSimulationTick = snapshot.simulationTick;
     this.lastEntityCount = snapshot.entityCount;
-    this.syncEntityVisuals(entities);
+    this.staleMappingCount += reconciliation.staleMappingCount;
+    this.applyVisualReconciliation(reconciliation.operations);
     this.updateOccupiedOverlay(occupiedCells);
+    return true;
   }
 
   /** Returns the current selection after a canvas-relative pick. */
@@ -274,16 +324,45 @@ export class BabylonRenderer {
     return boundsFromPoints(points);
   }
 
+  /** Updates the presentation-only placement preview. */
+  public setPlacementPreview(preview: PlacementPreview | undefined): void {
+    if (this.disposed) {
+      return;
+    }
+    if (preview === undefined) {
+      this.placementPreview.isVisible = false;
+      return;
+    }
+    const tileSize = this.cameraProjection.tileSizeMm / 1000;
+    this.placementPreview.isVisible = true;
+    this.placementPreview.position.set(
+      (preview.x + 0.5) * tileSize,
+      preview.elevationMm / 1000 + tileSize / 2,
+      (preview.z + 0.5) * tileSize,
+    );
+    this.placementPreview.scaling.set(tileSize, tileSize, tileSize);
+    this.placementPreview.rotation.y = (preview.rotation * Math.PI) / 2;
+    this.placementPreview.material =
+      preview.pending || !preview.valid
+        ? this.placementInvalidMaterial
+        : this.placementValidMaterial;
+  }
+
   public diagnostics(): RendererDiagnostics {
     return {
       renderFrames: this.renderFrames,
       receivedSnapshots: this.receivedSnapshots,
       lastSnapshotGeneration: this.lastSnapshotGeneration,
+      lastWorldGeneration: this.lastWorldGeneration ?? 0,
       lastSimulationTick: this.lastSimulationTick,
       lastEntityCount: this.lastEntityCount,
       occupiedCellCount: this.lastOccupiedCellCount,
       visibleEntityCount: this.entityVisuals.size,
       staleMappingCount: this.staleMappingCount,
+      staleSnapshotCount: this.staleSnapshotCount,
+      resetCount: this.resetCount,
+      visualGroupCount: this.visualTemplates.size,
+      instanceCount: this.entityVisuals.size,
       ...(this.selectedEntityId === undefined ? {} : { selectedEntityId: this.selectedEntityId }),
       disposed: this.disposed,
     };
@@ -301,19 +380,14 @@ export class BabylonRenderer {
     this.unsubscribeCamera();
     this.debugGrid?.dispose();
     this.debugGrid = undefined;
-    this.disposeOccupiedVisuals();
-    this.clearSelection();
-    for (const visual of this.entityVisuals.values()) {
-      visual.mesh.dispose(false, false);
-    }
-    this.entityVisuals.clear();
-    this.visualsByMesh.clear();
-    this.placeholder.dispose(false, true);
-    this.placeholderMaterial.dispose();
+    this.resetVisuals();
+    this.selectionListeners.clear();
     this.entityMaterial.dispose();
-    this.selectedMaterial.dispose();
     this.debugGridMaterial.dispose();
     this.occupiedMaterial.dispose();
+    this.placementPreview.dispose(false, true);
+    this.placementValidMaterial.dispose();
+    this.placementInvalidMaterial.dispose();
     this.light.dispose();
     this.camera.dispose();
     this.scene.dispose();
@@ -428,39 +502,76 @@ export class BabylonRenderer {
     this.lastOccupiedCellCount = 0;
   };
 
-  private readonly syncEntityVisuals = (entities: readonly RenderEntityRecord[]): void => {
-    const seenSlots = new Set<number>();
-    for (const entity of entities) {
-      seenSlots.add(entity.slot);
-      const existing = this.entityVisuals.get(entity.slot);
-      if (existing !== undefined && existing.generation !== entity.generation) {
-        this.staleMappingCount += 1;
-        this.removeEntityVisual(existing);
-      }
-      const visual = this.entityVisuals.get(entity.slot) ?? this.createEntityVisual(entity);
-      visual.generation = entity.generation;
-      this.updateEntityVisual(visual, entity);
+  private readonly applyVisualReconciliation = (
+    operations: readonly VisualReconciliationOperation[],
+  ): void => {
+    for (const operation of operations) {
+      this.applyVisualReconciliationOperation(operation);
     }
-    for (const visual of this.entityVisuals.values()) {
-      if (!seenSlots.has(visual.slot)) {
-        this.removeEntityVisual(visual);
-      }
-    }
-    if (
-      this.selectedEntityId !== undefined &&
-      this.screenBounds(this.selectedEntityId) === undefined
-    ) {
+    if (this.selectedEntityHandle !== undefined && !this.hasSelectedVisual()) {
       this.setSelection(undefined);
     }
   };
 
+  private readonly applyVisualReconciliationOperation = (
+    operation: VisualReconciliationOperation,
+  ): void => {
+    if (operation.type === 'create') {
+      this.createEntityVisual(operation.entity);
+      return;
+    }
+    const visual = this.entityVisuals.get(
+      operation.type === 'update' ? operation.entity.slot : operation.previous.slot,
+    );
+    if (operation.type === 'update') {
+      if (visual === undefined) {
+        this.staleMappingCount += 1;
+        this.createEntityVisual(operation.entity);
+      } else {
+        this.updateEntityVisual(visual, operation.entity);
+      }
+      return;
+    }
+    if (visual !== undefined) {
+      this.removeEntityVisual(visual);
+    }
+    if (operation.type === 'replace') {
+      this.createEntityVisual(operation.entity);
+    }
+  };
+
+  private readonly createVisualTemplate = (visualType: number): Mesh => {
+    const template = MeshBuilder.CreateBox(
+      `tessera-visual-type-${visualType}`,
+      { size: 1 },
+      this.scene,
+    );
+    template.material = this.entityMaterial;
+    template.isPickable = false;
+    template.isVisible = false;
+    this.visualTemplates.set(visualType, template);
+    return template;
+  };
+
   private readonly createEntityVisual = (entity: RenderEntityRecord): EntityVisual => {
-    const mesh = MeshBuilder.CreateBox(`tessera-entity-${entity.slot}`, { size: 1 }, this.scene);
-    mesh.material = this.entityMaterial;
+    const template =
+      this.visualTemplates.get(entity.visualType) ?? this.createVisualTemplate(entity.visualType);
+    const mesh = template.createInstance(`tessera-entity-${entity.slot}`);
     mesh.isPickable = true;
-    const visual: EntityVisual = { slot: entity.slot, generation: entity.generation, mesh };
+    mesh.isVisible = true;
+    mesh.renderOutline = false;
+    mesh.outlineColor = this.selectionOutlineColor;
+    mesh.outlineWidth = 0.05;
+    mesh.rotationQuaternion = Quaternion.Identity();
+    const visual: EntityVisual = {
+      slot: entity.slot,
+      generation: entity.generation,
+      visualType: entity.visualType,
+      mesh,
+    };
     this.entityVisuals.set(entity.slot, visual);
     this.visualsByMesh.set(mesh, visual);
+    this.updateEntityVisual(visual, entity);
     return visual;
   };
 
@@ -479,20 +590,17 @@ export class BabylonRenderer {
       entity.scale.y * tileSize,
       entity.scale.z * tileSize,
     );
-    visual.mesh.rotationQuaternion = new Quaternion(
+    visual.mesh.rotationQuaternion?.set(
       entity.rotation.x,
       entity.rotation.y,
       entity.rotation.z,
       entity.rotation.w,
     );
-    visual.mesh.material =
-      this.selectedEntityId === formatEntityId(visual)
-        ? this.selectedMaterial
-        : this.entityMaterial;
+    visual.mesh.renderOutline = this.isSelected(visual);
   };
 
   private readonly removeEntityVisual = (visual: EntityVisual): void => {
-    if (this.selectedEntityId === formatEntityId(visual)) {
+    if (this.isSelected(visual)) {
       this.setSelection(undefined);
     }
     this.entityVisuals.delete(visual.slot);
@@ -500,31 +608,57 @@ export class BabylonRenderer {
     visual.mesh.dispose(false, false);
   };
 
+  private readonly resetVisuals = (): void => {
+    this.setSelection(undefined);
+    for (const visual of this.entityVisuals.values()) {
+      visual.mesh.dispose(false, false);
+    }
+    this.entityVisuals.clear();
+    this.visualsByMesh.clear();
+    for (const template of this.visualTemplates.values()) {
+      template.dispose(false, true);
+    }
+    this.visualTemplates.clear();
+    this.disposeOccupiedVisuals();
+  };
+
+  private readonly isSelected = (visual: EntityVisual): boolean =>
+    this.selectedEntityHandle?.slot === visual.slot &&
+    this.selectedEntityHandle.generation === visual.generation;
+
+  private readonly hasSelectedVisual = (): boolean =>
+    this.selectedEntityHandle !== undefined &&
+    this.entityVisuals.get(this.selectedEntityHandle.slot)?.generation ===
+      this.selectedEntityHandle.generation;
+
   private readonly setSelection = (entityId: EntityId | undefined): void => {
     if (this.selectedEntityId === entityId) {
       return;
     }
-    this.setVisualMaterial(this.selectedEntityId, this.entityMaterial);
+    if (this.selectedEntityHandle !== undefined) {
+      this.setVisualSelection(this.selectedEntityHandle, false);
+    }
     this.selectedEntityId = entityId;
-    this.setVisualMaterial(entityId, this.selectedMaterial);
+    this.selectedEntityHandle = entityId === undefined ? undefined : parseEntityId(entityId);
+    if (this.selectedEntityHandle !== undefined) {
+      this.setVisualSelection(this.selectedEntityHandle, true);
+    }
     for (const listener of this.selectionListeners) {
       listener(entityId);
     }
   };
 
-  private readonly setVisualMaterial = (
-    entityId: EntityId | undefined,
-    material: StandardMaterial,
+  private readonly setVisualSelection = (
+    handle: { readonly slot: number; readonly generation: number },
+    selected: boolean,
   ): void => {
-    const handle = entityId === undefined ? undefined : parseEntityId(entityId);
-    const visual = handle === undefined ? undefined : this.entityVisuals.get(handle.slot);
-    if (handle !== undefined && visual !== undefined && visual.generation === handle.generation) {
-      visual.mesh.material = material;
+    const visual = this.entityVisuals.get(handle.slot);
+    if (visual !== undefined && visual.generation === handle.generation) {
+      visual.mesh.renderOutline = selected;
     }
   };
 
   private readonly clearSelection = (): void => {
     this.setSelection(undefined);
-    this.selectionListeners.clear();
   };
 }

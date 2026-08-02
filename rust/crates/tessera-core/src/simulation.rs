@@ -16,6 +16,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const DEFAULT_TICK_RATE_HZ: u32 = 20;
 /// Version of the canonical meaningful-state encoding.
 pub const STATE_HASH_VERSION: u16 = 2;
+/// Maximum UTF-8 length of a public object type identifier.
+pub const MAX_OBJECT_TYPE_ID_BYTES: usize = 128;
 /// A canonical 32-byte BLAKE3 digest.
 pub type StateHash = [u8; 32];
 
@@ -70,6 +72,8 @@ pub enum ReplayError {
     FinalTickTooLow,
     /// The simulation could not schedule or advance a replay command.
     Simulation(SimulationError),
+    /// The replay's object-type registry could not be rebuilt.
+    Configuration(GridConfigurationError),
 }
 
 #[derive(Clone)]
@@ -88,6 +92,8 @@ pub struct Simulation {
     tick: u64,
     entities: EntityArena,
     footprints: BTreeMap<u32, Footprint>,
+    object_type_ids: BTreeMap<u32, String>,
+    last_object_type_id: Option<String>,
     occupancy: OccupancyGrid,
     rng: DeterministicRng,
     pending: Vec<ScheduledCommand>,
@@ -106,6 +112,8 @@ impl Simulation {
             tick: 0,
             entities: EntityArena::new(),
             footprints: BTreeMap::new(),
+            object_type_ids: BTreeMap::new(),
+            last_object_type_id: None,
             occupancy: OccupancyGrid::new(),
             rng: DeterministicRng::new(seed),
             pending: Vec::new(),
@@ -162,6 +170,76 @@ impl Simulation {
         }
         self.footprints.insert(object_type, footprint);
         Ok(())
+    }
+
+    /// Registers a public object type identifier and returns its deterministic Rust handle.
+    ///
+    /// Handles are assigned in lexicographic identifier order. The Wasm adapter
+    /// enforces that initialization supplies definitions in that order, while
+    /// the registry remains owned by the kernel and is included in state hashes.
+    pub fn register_object_type(
+        &mut self,
+        id: impl Into<String>,
+        footprint: Footprint,
+    ) -> Result<u32, GridConfigurationError> {
+        let id = id.into();
+        if id.is_empty()
+            || id.len() > MAX_OBJECT_TYPE_ID_BYTES
+            || id.chars().any(|character| character.is_control())
+        {
+            return Err(GridConfigurationError::InvalidObjectTypeId);
+        }
+        if self
+            .object_type_ids
+            .values()
+            .any(|registered| registered == &id)
+        {
+            return Err(GridConfigurationError::DuplicateObjectTypeId);
+        }
+        if self
+            .last_object_type_id
+            .as_ref()
+            .is_some_and(|last| id.as_str() <= last.as_str())
+        {
+            return Err(GridConfigurationError::ObjectTypeOrderViolation);
+        }
+        self.ensure_definition_window()?;
+        let handle = (1..=u32::MAX)
+            .find(|candidate| !self.footprints.contains_key(candidate))
+            .ok_or(GridConfigurationError::InvalidObjectType)?;
+        self.footprints.insert(handle, footprint);
+        self.object_type_ids.insert(handle, id.clone());
+        self.last_object_type_id = Some(id);
+        Ok(handle)
+    }
+
+    /// Returns the public identifier for a Rust-assigned object type handle.
+    pub fn object_type_id(&self, object_type: u32) -> Option<&str> {
+        self.object_type_ids.get(&object_type).map(String::as_str)
+    }
+
+    /// Returns the Rust-assigned handle for a public object type identifier.
+    pub fn object_type_handle(&self, id: &str) -> Option<u32> {
+        self.object_type_ids
+            .iter()
+            .find_map(|(handle, registered)| (registered == id).then_some(*handle))
+    }
+
+    /// Checks a prospective placement without mutating occupancy or consuming a command.
+    pub fn validate_placement(
+        &self,
+        object_type: u32,
+        position: GridPosition,
+        rotation: QuarterTurn,
+    ) -> Result<usize, RejectionReason> {
+        if !self.object_type_is_known(object_type) {
+            return Err(RejectionReason::InvalidObjectType);
+        }
+        let cells = self.cells_for_transform(object_type, position, rotation)?;
+        self.occupancy
+            .check_available(&cells, None)
+            .map_err(OccupancyError::rejection_reason)?;
+        Ok(cells.len())
     }
 
     /// Returns the registered footprint for an object type, if any.
@@ -317,7 +395,24 @@ impl Simulation {
 
     /// Rebuilds a simulation from a seed and assigned-tick replay log.
     pub fn replay(seed: Seed, log: &ReplayLog) -> Result<Self, ReplayError> {
+        Self::replay_with_object_types(seed, log, std::iter::empty())
+    }
+
+    /// Rebuilds a simulation with the same public object registry as its source.
+    pub fn replay_with_object_types<I>(
+        seed: Seed,
+        log: &ReplayLog,
+        object_types: I,
+    ) -> Result<Self, ReplayError>
+    where
+        I: IntoIterator<Item = (String, Footprint)>,
+    {
         let mut simulation = Self::new(seed);
+        for (id, footprint) in object_types {
+            simulation
+                .register_object_type(id, footprint)
+                .map_err(ReplayError::Configuration)?;
+        }
         let mut index = 0;
         while index < log.commands.len() {
             let target_tick = log.commands[index].scheduled_tick;
@@ -394,6 +489,15 @@ impl Simulation {
             out.extend_from_slice(&object_type.to_le_bytes());
             footprint.encode_canonical(&mut out);
         }
+        if !self.object_type_ids.is_empty() {
+            out.extend_from_slice(b"TESSERA_OBJECT_IDS\0");
+            out.extend_from_slice(&(self.object_type_ids.len() as u64).to_le_bytes());
+            for (object_type, id) in &self.object_type_ids {
+                out.extend_from_slice(&object_type.to_le_bytes());
+                out.extend_from_slice(&(id.len() as u32).to_le_bytes());
+                out.extend_from_slice(id.as_bytes());
+            }
+        }
         self.entities.encode_canonical(&mut out);
         self.occupancy.encode_canonical(&mut out);
 
@@ -437,7 +541,7 @@ impl Simulation {
                 position,
                 rotation,
             } => {
-                if object_type == 0 {
+                if !self.object_type_is_known(object_type) {
                     return self
                         .reject(command.client_sequence, RejectionReason::InvalidObjectType);
                 }
@@ -467,7 +571,7 @@ impl Simulation {
                 })
             }
             Command::SpawnRandom { object_type } => {
-                if object_type == 0 {
+                if !self.object_type_is_known(object_type) {
                     return self
                         .reject(command.client_sequence, RejectionReason::InvalidObjectType);
                 }
@@ -579,6 +683,24 @@ impl Simulation {
         self.footprints
             .get(&object_type)
             .unwrap_or_else(|| DEFAULT_FOOTPRINT.get_or_init(Footprint::single_cell))
+    }
+
+    fn object_type_is_known(&self, object_type: u32) -> bool {
+        object_type != 0
+            && (self.object_type_ids.is_empty() || self.footprints.contains_key(&object_type))
+    }
+
+    fn ensure_definition_window(&self) -> Result<(), GridConfigurationError> {
+        if self.tick != 0
+            || !self.pending.is_empty()
+            || !self.seen_sequences.is_empty()
+            || !self.replay_commands.is_empty()
+            || !self.events.is_empty()
+            || !self.entities.is_empty()
+        {
+            return Err(GridConfigurationError::WorldAlreadyStarted);
+        }
+        Ok(())
     }
 
     fn cells_for_transform(
@@ -1017,5 +1139,67 @@ mod tests {
             simulation.register_object_footprint(5, crate::Footprint::single_cell()),
             Err(crate::GridConfigurationError::WorldAlreadyStarted)
         );
+    }
+
+    #[test]
+    fn public_object_types_are_sorted_and_placement_queries_do_not_mutate() {
+        let mut simulation = Simulation::new(SEED);
+        let first = simulation
+            .register_object_type("foundation", crate::Footprint::rectangle(2, 1).unwrap())
+            .unwrap();
+        assert_eq!(first, 1);
+        assert_eq!(simulation.object_type_handle("foundation"), Some(first));
+        assert_eq!(simulation.object_type_id(first), Some("foundation"));
+        assert_eq!(
+            simulation
+                .register_object_type("anchor", crate::Footprint::single_cell())
+                .unwrap_err(),
+            crate::GridConfigurationError::ObjectTypeOrderViolation
+        );
+        let before = simulation.state_hash();
+        assert_eq!(
+            simulation.validate_placement(first, GridPosition::new(4, -2, 125), QuarterTurn::R1),
+            Ok(2)
+        );
+        assert_eq!(simulation.occupied_cell_count(), 0);
+        assert_eq!(simulation.state_hash(), before);
+    }
+
+    #[test]
+    fn placement_query_reports_authoritative_overlap() {
+        let mut simulation = Simulation::new(SEED);
+        simulation
+            .register_object_type("foundation", crate::Footprint::single_cell())
+            .unwrap();
+        simulation.submit_batch(&[spawn(1, 1, 0)]).unwrap();
+        simulation.advance_one_tick().unwrap();
+        assert_eq!(
+            simulation.validate_placement(1, GridPosition::new(0, 0, 250), QuarterTurn::R0),
+            Err(RejectionReason::OccupiedCell)
+        );
+        assert_eq!(
+            simulation.validate_placement(1, GridPosition::new(1, 0, 0), QuarterTurn::R0),
+            Ok(1)
+        );
+    }
+
+    #[test]
+    fn replay_with_registry_preserves_footprint_occupancy_and_hash() {
+        let mut source = Simulation::new(SEED);
+        let footprint = crate::Footprint::rectangle(2, 1).unwrap();
+        source
+            .register_object_type("foundation", footprint.clone())
+            .unwrap();
+        source.submit_batch(&[spawn(1, 1, 0)]).unwrap();
+        source.advance_one_tick().unwrap();
+        let log = source.replay_log();
+        let rebuilt = Simulation::replay_with_object_types(
+            SEED,
+            &log,
+            [("foundation".to_owned(), footprint)],
+        )
+        .unwrap();
+        assert_eq!(rebuilt.state_hash(), source.state_hash());
+        assert_eq!(rebuilt.occupied_cell_count(), 2);
     }
 }

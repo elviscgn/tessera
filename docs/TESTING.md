@@ -34,6 +34,7 @@ The Rust suite covers the rules that must be identical in native and browser run
 - canonical BLAKE3 hashes;
 - replay across idle ticks and rejected replay order;
 - normalized footprints, rotated cell expansion, atomic occupancy claims, overlap rejection, move/remove release, and entity/occupancy invariants;
+- sorted public object registries, non-mutating placement queries, deterministic rejection reasons, and replay with the same footprint registry;
 - serialization, migration, and persistence fixtures as those systems land.
 
 The protocol crate also tests little-endian command/event/render records, lengths, flags, opcodes, region descriptors, and contiguous event sequences.
@@ -54,7 +55,7 @@ The Worker checks that:
 
 ## Browser checks
 
-The Scenario Lab is the first browser smoke target. It checks the canvas, Babylon scene, orthographic camera, named pan/zoom/rotation actions, screen-to-grid readout, render loop, Worker readiness, packed snapshot delivery, event acknowledgement, memory-generation diagnostics, entity picking, selected-ID display, screen-space bounds, and disposal on `pagehide`.
+The Scenario Lab is the first browser smoke target. It checks the canvas, Babylon scene, orthographic camera, named pan/zoom/rotation actions, screen-to-grid readout, render loop, Worker readiness, packed snapshot delivery, event acknowledgement, memory-generation diagnostics, entity picking, selected-ID display, screen-space bounds, Rust-backed placement previews, placement/removal controls, and disposal on `pagehide`.
 
 The probe uses structured `data-tessera-*` attributes so browser tests can assert ticks, hashes, sequence numbers, buffer ownership, and render generations without relying on timing or pixels alone. The known native/Wasm probe hash is:
 
@@ -62,7 +63,9 @@ The probe uses structured `data-tessera-*` attributes so browser tests can asser
 1d58e8e0cf937e92279a5206ca3d4e8d24b046b9545568695bc262dd0ed4967c
 ```
 
-The render probe also validates the authoritative occupied-cell region, entity transform regions, and their typed-array decoders. Unit coverage rejects malformed entity layouts, duplicate slots, invalid generations, and stale selection handles. Browser smoke selects the rendered probe entity and checks that its `slot:generation` ID and canvas-relative bounds appear in the lab. Placement, save/load, visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
+The render probe also validates the authoritative occupied-cell region, entity transform regions, and their typed-array decoders. Unit coverage rejects malformed entity layouts, duplicate slots, invalid generations, and stale selection handles. Browser smoke selects the rendered probe entity and checks that its `slot:generation` ID and canvas-relative bounds appear in the lab. Save/load, visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
+
+Renderer reconciliation has pure unit coverage for slot updates, missing-entity removals, generation replacement, visual-type regrouping, newer-world resets, and stale snapshot rejection. Renderer diagnostics expose visual-group count, instance count, reset count, stale mapping count, and stale snapshot count so a browser stress run can prove that dropped or late projections do not resurrect presentation state.
 
 ## Visual tests
 

@@ -320,6 +320,12 @@ impl OccupancyGrid {
 pub enum GridConfigurationError {
     /// Object type zero is reserved.
     InvalidObjectType,
+    /// Public object type identifiers must be non-empty and bounded.
+    InvalidObjectTypeId,
+    /// An object type identifier was registered more than once.
+    DuplicateObjectTypeId,
+    /// Object type identifiers must be registered in canonical order.
+    ObjectTypeOrderViolation,
     /// Definitions cannot change after commands or ticks have begun.
     WorldAlreadyStarted,
 }

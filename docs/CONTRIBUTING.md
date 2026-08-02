@@ -24,6 +24,7 @@ Use a short commit subject in the imperative mood, for example `add camera coord
 - TypeScript owns browser lifecycle, Worker communication, input translation, persistence adapters, and presentation state.
 - Babylon.js is a replaceable renderer. A mesh must never become the source of truth for entity existence or gameplay.
 - Commands and events cross the Worker boundary in versioned batches. Do not add per-entity calls or JSON to a hot path.
+- Consumer object definitions use stable string IDs. Rust assigns the handles and remains the authority for footprint expansion, placement validity, and command rejection; a browser preview is never a substitute for command validation.
 - Public consumers use declared entry points. Do not import internal files from examples or tests that represent consumer behaviour.
 
 New dependencies need a clear reason, a licence check, and an explanation of their runtime or build impact. New public exports need tests and documentation. If a proposed change conflicts with the architecture, pause and write down the trade-off before proceeding.

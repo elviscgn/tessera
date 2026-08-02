@@ -19,6 +19,8 @@ pub const RENDER_MAGIC: [u8; 8] = *b"TSRND001";
 pub const RENDER_DESCRIPTOR_MAGIC: [u8; 8] = *b"TSDES001";
 /// Eight-byte reliable event batch magic.
 pub const EVENT_MAGIC: [u8; 8] = *b"TSEVT001";
+/// Eight-byte placement validation response magic.
+pub const PLACEMENT_MAGIC: [u8; 8] = *b"TSPLC001";
 /// Fixed command batch header length.
 pub const COMMAND_HEADER_LEN: usize = 28;
 /// Fixed record header length.
@@ -35,6 +37,8 @@ pub const RENDER_DESCRIPTOR_LEN: usize = 32;
 pub const EVENT_HEADER_LEN: usize = 48;
 /// Fixed event record header length.
 pub const EVENT_RECORD_HEADER_LEN: usize = 8;
+/// Fixed placement validation response length.
+pub const PLACEMENT_RESPONSE_LEN: usize = 40;
 /// Maximum accepted command batch length before any record allocation.
 pub const MAX_BATCH_BYTES: usize = 1024 * 1024;
 /// Maximum accepted record count before any record allocation.
@@ -163,6 +167,23 @@ pub struct CommandResponse {
     pub tick: u64,
     /// Canonical BLAKE3 state hash after advancement.
     pub state_hash: [u8; 32],
+}
+
+/// The authoritative result of a placement query.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PlacementValidationResponse {
+    /// Rust-assigned object type handle.
+    pub object_type: u32,
+    /// Requested integer anchor position.
+    pub position: GridPosition,
+    /// Requested clockwise quarter-turn.
+    pub rotation: QuarterTurn,
+    /// Whether the complete footprint can be claimed now.
+    pub valid: bool,
+    /// Deterministic rejection reason when the placement is invalid.
+    pub rejection_reason: Option<RejectionReason>,
+    /// Number of cells in the normalized footprint when expansion succeeds.
+    pub occupied_cell_count: u32,
 }
 
 /// Stable protocol failure categories. The numeric codes are part of the wire contract.
@@ -397,6 +418,82 @@ pub fn encode_command_response(response: CommandResponse) -> Vec<u8> {
     bytes.extend_from_slice(&response.state_hash);
     bytes.extend_from_slice(&(RESPONSE_LEN as u32).to_le_bytes());
     bytes
+}
+
+/// Encodes a fixed placement validation response.
+pub fn encode_placement_validation(response: PlacementValidationResponse) -> Vec<u8> {
+    let mut bytes = vec![0_u8; PLACEMENT_RESPONSE_LEN];
+    bytes[..8].copy_from_slice(&PLACEMENT_MAGIC);
+    bytes[8..10].copy_from_slice(&PROTOCOL_VERSION.to_le_bytes());
+    bytes[12..16].copy_from_slice(&(PLACEMENT_RESPONSE_LEN as u32).to_le_bytes());
+    bytes[16..20].copy_from_slice(&response.object_type.to_le_bytes());
+    bytes[20..24].copy_from_slice(&response.position.x.to_le_bytes());
+    bytes[24..28].copy_from_slice(&response.position.z.to_le_bytes());
+    bytes[28..32].copy_from_slice(&response.position.elevation_mm.to_le_bytes());
+    bytes[32] = response.rotation.as_u8();
+    bytes[33] = u8::from(response.valid);
+    bytes[34] = response.rejection_reason.map_or(0, RejectionReason::code);
+    bytes[36..40].copy_from_slice(&response.occupied_cell_count.to_le_bytes());
+    bytes
+}
+
+/// Decodes and validates a placement validation response.
+pub fn decode_placement_validation(
+    bytes: &[u8],
+) -> Result<PlacementValidationResponse, ProtocolError> {
+    if bytes.len() != PLACEMENT_RESPONSE_LEN {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidPayload,
+            bytes.len(),
+        ));
+    }
+    if bytes[..8] != PLACEMENT_MAGIC {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidMagic, 0));
+    }
+    if read_u16(bytes, 8)? != PROTOCOL_VERSION {
+        return Err(ProtocolError::new(ProtocolErrorCode::UnsupportedVersion, 8));
+    }
+    if read_u16(bytes, 10)? != 0 {
+        return Err(ProtocolError::new(ProtocolErrorCode::UnsupportedFlags, 10));
+    }
+    if bytes[35] != 0 {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidPayload, 35));
+    }
+    if read_u32(bytes, 12)? as usize != PLACEMENT_RESPONSE_LEN {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidTotalLength,
+            12,
+        ));
+    }
+    if bytes[32] > 3 {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidPayload, 32));
+    }
+    if bytes[33] > 1 {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidPayload, 33));
+    }
+    let rejection_reason = if bytes[34] == 0 {
+        None
+    } else {
+        Some(rejection_reason(bytes[34])?)
+    };
+    if bytes[33] == 1 && rejection_reason.is_some() {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidPayload, 34));
+    }
+    if bytes[33] == 0 && rejection_reason.is_none() {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidPayload, 34));
+    }
+    Ok(PlacementValidationResponse {
+        object_type: read_u32(bytes, 16)?,
+        position: GridPosition::new(
+            i32::from_le_bytes(read_array(bytes, 20)?),
+            i32::from_le_bytes(read_array(bytes, 24)?),
+            i32::from_le_bytes(read_array(bytes, 28)?),
+        ),
+        rotation: QuarterTurn::from_index(bytes[32]),
+        valid: bytes[33] == 1,
+        rejection_reason,
+        occupied_cell_count: read_u32(bytes, 36)?,
+    })
 }
 
 /// Encodes a renderer-neutral hybrid structure-of-arrays snapshot.
@@ -1133,7 +1230,7 @@ fn decode_command(
             }
         }
         OPCODE_MOVE => {
-            if payload.len() != 33 {
+            if payload.len() != 29 {
                 return Err(ProtocolError::new(
                     ProtocolErrorCode::InvalidPayload,
                     offset,
@@ -1260,6 +1357,27 @@ mod tests {
     }
 
     #[test]
+    fn move_and_remove_commands_round_trip_their_packed_payloads() {
+        let entity = EntityId::new(3, 2).unwrap();
+        let batch = CommandBatch {
+            batch_sequence: 18,
+            commands: vec![
+                CommandEnvelope::new(
+                    2,
+                    Command::Move {
+                        entity,
+                        position: GridPosition::new(4, -5, 250),
+                        rotation: QuarterTurn::R1,
+                    },
+                ),
+                CommandEnvelope::new(3, Command::Remove { entity }),
+            ],
+        };
+        let encoded = encode_command_batch(&batch).expect("move/remove should encode");
+        assert_eq!(decode_command_batch(&encoded), Ok(batch));
+    }
+
+    #[test]
     fn malformed_length_is_rejected_before_record_decode() {
         let mut encoded = encode_command_batch(&sample_batch()).unwrap();
         let declared_length = u32::try_from(encoded.len() - 1).unwrap();
@@ -1311,6 +1429,33 @@ mod tests {
         assert_eq!(&encoded[20..28], &20_u64.to_le_bytes());
         assert_eq!(&encoded[28..60], &[0xabu8; 32]);
         assert_eq!(&encoded[60..64], &(RESPONSE_LEN as u32).to_le_bytes());
+    }
+
+    #[test]
+    fn placement_validation_response_round_trips_and_rejects_inconsistent_results() {
+        let response = PlacementValidationResponse {
+            object_type: 4,
+            position: GridPosition::new(-2, 3, 100),
+            rotation: QuarterTurn::R2,
+            valid: false,
+            rejection_reason: Some(RejectionReason::OccupiedCell),
+            occupied_cell_count: 0,
+        };
+        let mut encoded = encode_placement_validation(response);
+        assert_eq!(encoded.len(), PLACEMENT_RESPONSE_LEN);
+        assert_eq!(&encoded[..8], &PLACEMENT_MAGIC);
+        assert_eq!(decode_placement_validation(&encoded), Ok(response));
+        encoded[34] = 0;
+        assert_eq!(
+            decode_placement_validation(&encoded),
+            Err(ProtocolError::new(ProtocolErrorCode::InvalidPayload, 34))
+        );
+        let mut reserved = encode_placement_validation(response);
+        reserved[35] = 1;
+        assert_eq!(
+            decode_placement_validation(&reserved),
+            Err(ProtocolError::new(ProtocolErrorCode::InvalidPayload, 35))
+        );
     }
 
     fn sample_events() -> Vec<SimulationEvent> {

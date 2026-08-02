@@ -12,10 +12,12 @@ Tessera is delivered in small checkpoints so each release keeps a clear, reviewa
 - **Milestone 4 — isometric camera and coordinates:** right-handed orthographic projection, four rotations, pan/zoom/focus, floor-based grid conversion, and the camera laboratory.
 - **Milestone 5 — grid and occupancy:** normalized integer footprints, deterministic occupancy claims, atomic move/remove updates, invariant checks, and the packed debug-grid projection.
 - **Milestone 6 — picking and selection:** packed entity transforms, stable slot/generation IDs, canvas picking, screen-space bounds, stale-generation protection, and deterministic readiness/tick/render waits.
+- **Milestone 7 — placement:** Rust-owned declarative object handles, non-mutating placement queries, presentation-only previews, authoritative placement/move/removal commands, and registry-aware replay fixtures.
+- **Milestone 8 — scalable visuals:** visual-type groups backed by ordinary Babylon instances, snapshot removals, world-generation resets, and stale-map diagnostics.
 
 ## Next
 
-**Milestone 7 — placement** is the next implementation checkpoint. It will add preview state, Rust validation, placement/removal commands, and replay coverage.
+**Milestone 9 — persistence and replay** is the next implementation checkpoint. It will add versioned saves, validation, atomic load, migrations, and browser/native parity fixtures.
 
 ## Planned checkpoints
 

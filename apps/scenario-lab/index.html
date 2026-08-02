@@ -100,6 +100,28 @@
         border-color: #60a5fa;
         outline: none;
       }
+
+      #placementControls {
+        display: flex;
+        gap: 0.4rem;
+        margin-top: 0.45rem;
+      }
+
+      #placementControls button {
+        flex: 1;
+        border: 1px solid #475569;
+        border-radius: 0.35rem;
+        background: #172033;
+        color: #e2e8f0;
+        cursor: pointer;
+        padding: 0.35rem 0.45rem;
+      }
+
+      #placementControls button:hover,
+      #placementControls button:focus-visible {
+        border-color: #34d399;
+        outline: none;
+      }
     </style>
   </head>
   <body>
@@ -117,11 +139,16 @@
         <p>Occupied cells <code id="occupiedCells">0</code></p>
         <p>Selected entity <code id="selectedEntity">—</code></p>
         <p>Screen bounds <code id="selectionBounds">—</code></p>
+        <p>Placement <code id="placementStatus">move over a cell</code></p>
         <p>Drag to pan · wheel to zoom · <code>Q</code>/<code>E</code> to rotate</p>
         <div id="cameraControls">
           <button type="button" data-camera-action="rotate-left">Rotate left</button>
           <button type="button" data-camera-action="focus-origin">Focus origin</button>
           <button type="button" data-camera-action="rotate-right">Rotate right</button>
+        </div>
+        <div id="placementControls">
+          <button type="button" data-placement-action="place">Place at pointer</button>
+          <button type="button" data-placement-action="remove">Remove selected</button>
         </div>
       </aside>
     </main>

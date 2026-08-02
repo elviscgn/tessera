@@ -22,6 +22,7 @@ import type {
   CameraState,
   CameraVector,
   CameraViewport,
+  EntityTransformTarget,
   FoundationDiagnostics,
   FoundationError,
   FoundationReady,
@@ -31,6 +32,11 @@ import type {
   FoundationWorker,
   GridCoordinate,
   OrthographicBoundsMm,
+  ObjectTypeDefinition,
+  PlacementPreview,
+  PlacementTarget,
+  PlacementValidation,
+  ScenarioDefinition,
   EntityId,
   EntityHandle,
   ScreenBounds,
@@ -71,6 +77,22 @@ describe('public runtime surface', () => {
     const projectedBounds: ScreenBounds | undefined = boundsFromPoints([selectionPoint]);
     const selectionBounds: ScreenBounds | undefined = undefined;
     const selectionOptions: SelectionActionLayerOptions | undefined = undefined;
+    const objectType: ObjectTypeDefinition = { id: 'foundation' };
+    const scenario: ScenarioDefinition = { id: 'foundation' };
+    const placementTarget: PlacementTarget = {
+      objectType: objectType.id,
+      x: 0,
+      z: 0,
+      elevationMm: 0,
+      rotation: 0,
+    };
+    const transformTarget: EntityTransformTarget = placementTarget;
+    const placement: PlacementValidation = {
+      ...placementTarget,
+      valid: true,
+      occupiedCellCount: 1,
+    };
+    const preview: PlacementPreview = { ...placement, pending: false };
 
     expect(typeof createFoundationRuntime).toBe('function');
     expect(typeof SelectionActionLayer).toBe('function');
@@ -95,6 +117,12 @@ describe('public runtime surface', () => {
       selectionPoint,
       selectionBounds,
       selectionOptions,
-    ]).toHaveLength(16);
+      objectType,
+      scenario,
+      placementTarget,
+      transformTarget,
+      placement,
+      preview,
+    ]).toHaveLength(22);
   });
 });

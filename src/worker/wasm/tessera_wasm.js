@@ -46,12 +46,7 @@ export class TesseraWasm {
      */
     event_batch(after_sequence, max_events) {
         const ret = wasm.tesserawasm_event_batch(this.__wbg_ptr, after_sequence, max_events);
-        if (ret[3]) {
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-        return v1;
+        return readU8Result(ret);
     }
     /**
      * Returns the highest event sequence currently retained by the simulation.
@@ -77,17 +72,29 @@ export class TesseraWasm {
         return this;
     }
     /**
+     * Registers one declarative object type before the first command is run.
+     * @param {string} id
+     * @param {Int32Array} footprint_offsets
+     * @returns {number}
+     */
+    register_object_type(id, footprint_offsets) {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray32ToWasm0(footprint_offsets, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.tesserawasm_register_object_type(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0] >>> 0;
+    }
+    /**
      * Builds the latest packed snapshot and returns a descriptor into Wasm memory.
      * @returns {Uint8Array}
      */
     render_snapshot_descriptor() {
         const ret = wasm.tesserawasm_render_snapshot_descriptor(this.__wbg_ptr);
-        if (ret[3]) {
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-        return v1;
+        return readU8Result(ret);
     }
     /**
      * Decodes one binary command batch, schedules it, advances bounded exact ticks, and
@@ -100,12 +107,7 @@ export class TesseraWasm {
         const ptr0 = passArray8ToWasm0(command_batch, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.tesserawasm_run_command_batch(this.__wbg_ptr, ptr0, len0, exact_ticks);
-        if (ret[3]) {
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-        return v2;
+        return readU8Result(ret);
     }
     /**
      * Returns the current authoritative tick.
@@ -115,8 +117,30 @@ export class TesseraWasm {
         const ret = wasm.tesserawasm_tick(this.__wbg_ptr);
         return BigInt.asUintN(64, ret);
     }
+    /**
+     * Queries authoritative occupancy for a prospective placement without mutation.
+     * @param {number} object_type
+     * @param {number} x
+     * @param {number} z
+     * @param {number} elevation_mm
+     * @param {number} rotation
+     * @returns {Uint8Array}
+     */
+    validate_placement(object_type, x, z, elevation_mm, rotation) {
+        const ret = wasm.tesserawasm_validate_placement(this.__wbg_ptr, object_type, x, z, elevation_mm, rotation);
+        return readU8Result(ret);
+    }
 }
 if (Symbol.dispose) TesseraWasm.prototype[Symbol.dispose] = TesseraWasm.prototype.free;
+function readU8Result(ret) {
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    const value = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return value;
+}
+
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
@@ -157,6 +181,14 @@ function getStringFromWasm0(ptr, len) {
     return decodeText(ptr >>> 0, len);
 }
 
+let cachedUint32ArrayMemory0 = null;
+function getUint32ArrayMemory0() {
+    if (cachedUint32ArrayMemory0 === null || cachedUint32ArrayMemory0.byteLength === 0) {
+        cachedUint32ArrayMemory0 = new Uint32Array(wasm.memory.buffer);
+    }
+    return cachedUint32ArrayMemory0;
+}
+
 let cachedUint8ArrayMemory0 = null;
 function getUint8ArrayMemory0() {
     if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.byteLength === 0) {
@@ -165,10 +197,54 @@ function getUint8ArrayMemory0() {
     return cachedUint8ArrayMemory0;
 }
 
+function passArray32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getUint32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
 function passArray8ToWasm0(arg, malloc) {
     const ptr = malloc(arg.length * 1, 1) >>> 0;
     getUint8ArrayMemory0().set(arg, ptr / 1);
     WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
+function passStringToWasm0(arg, malloc, realloc) {
+    if (realloc === undefined) {
+        const buf = cachedTextEncoder.encode(arg);
+        const ptr = malloc(buf.length, 1) >>> 0;
+        getUint8ArrayMemory0().subarray(ptr, ptr + buf.length).set(buf);
+        WASM_VECTOR_LEN = buf.length;
+        return ptr;
+    }
+
+    let len = arg.length;
+    let ptr = malloc(len, 1) >>> 0;
+
+    const mem = getUint8ArrayMemory0();
+
+    let offset = 0;
+
+    for (; offset < len; offset++) {
+        const code = arg.charCodeAt(offset);
+        if (code > 0x7F) break;
+        mem[ptr + offset] = code;
+    }
+    if (offset !== len) {
+        if (offset !== 0) {
+            arg = arg.slice(offset);
+        }
+        ptr = realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0;
+        const view = getUint8ArrayMemory0().subarray(ptr + offset, ptr + len);
+        const ret = cachedTextEncoder.encodeInto(arg, view);
+
+        offset += ret.written;
+        ptr = realloc(ptr, len, offset, 1) >>> 0;
+    }
+
+    WASM_VECTOR_LEN = offset;
     return ptr;
 }
 
@@ -192,6 +268,19 @@ function decodeText(ptr, len) {
     return cachedTextDecoder.decode(getUint8ArrayMemory0().subarray(ptr, ptr + len));
 }
 
+const cachedTextEncoder = new TextEncoder();
+
+if (!('encodeInto' in cachedTextEncoder)) {
+    cachedTextEncoder.encodeInto = function (arg, view) {
+        const buf = cachedTextEncoder.encode(arg);
+        view.set(buf);
+        return {
+            read: arg.length,
+            written: buf.length
+        };
+    };
+}
+
 let WASM_VECTOR_LEN = 0;
 
 let wasmModule, wasmInstance, wasm;
@@ -199,6 +288,7 @@ function __wbg_finalize_init(instance, module) {
     wasmInstance = instance;
     wasm = instance.exports;
     wasmModule = module;
+    cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
     return wasm;
@@ -285,4 +375,4 @@ async function __wbg_init(module_or_path) {
     return __wbg_finalize_init(instance, module);
 }
 
-export { initSync, __wbg_init as default };
+export { initSync, __wbg_init as init };

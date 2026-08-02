@@ -19,6 +19,15 @@ export {
 } from '../browser/foundation-runtime';
 
 export {
+  type EntityTransformTarget,
+  type ObjectTypeDefinition,
+  type PlacementPreview,
+  type PlacementTarget,
+  type PlacementValidation,
+  type ScenarioDefinition,
+} from './runtime-types';
+
+export {
   CameraProjection,
   DEFAULT_CAMERA_PITCH_RADIANS,
   DEFAULT_CAMERA_ZOOM_TILES,
