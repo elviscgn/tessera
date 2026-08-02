@@ -24,7 +24,8 @@ describe('Milestone 0 foundation metadata', () => {
     expect(packageJson).toContain('"prettier": "3.9.6"');
     expect(packageJson).toContain('"@babylonjs/core": "9.19.0"');
     expect(packageJson).toContain('"@babylonjs/loaders": "9.19.0"');
-    expect(packageJson).not.toMatch(/"(playwright|@playwright\/test|react|react-dom)"\s*:/);
+    expect(packageJson).toContain('"@playwright/test": "1.60.0"');
+    expect(packageJson).not.toMatch(/"(react|react-dom)"\s*:/);
     expect(readRepositoryFile('.node-version').trim()).toBe('24.18.1');
     expect(readRepositoryFile('.wasm-pack-version').trim()).toBe('0.15.0');
     expect(rustToolchain).toContain('channel = "1.97.1"');

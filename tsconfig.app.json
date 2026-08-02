@@ -11,6 +11,7 @@
     "src/testkit/**/*.ts",
     "apps/**/*.ts",
     "tests/**/*.ts",
+    "playwright.config.ts",
     "vite.config.ts",
     "vitest.config.ts"
   ]

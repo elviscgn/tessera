@@ -53,7 +53,7 @@ flowchart LR
 | **Persistence**          | Rust-owned versioned JSON saves, checksums, identity validation, atomic loads, replay metadata, and browser adapters |
 | **Diagnostics**          | Development-only test bridge, deterministic waits, annotated snapshot captures, and reproduction manifests           |
 
-The authoritative grid, occupancy model, selection path, declarative placement flow, grouped renderer projection, persistence boundary, and Scenario Lab laboratories are now in place. The wider consumer-facing scenario API and browser regression suite continue to grow around this foundation.
+The authoritative grid, occupancy model, selection path, declarative placement flow, grouped renderer projection, persistence boundary, and Scenario Lab laboratories are now in place. The public runtime is exercised by pinned Chromium flows and visuals, a production bridge-exclusion smoke test, and Firefox/WebKit compatibility smoke.
 
 ## Saving and loading
 
@@ -116,6 +116,7 @@ Open the local URL printed by Vite. The complete toolchain setup is in [docs/SET
 | Understand ownership and data flow | [Architecture](docs/ARCHITECTURE.md)   |
 | Set up the pinned toolchain        | [Setup](docs/SETUP.md)                 |
 | Run or extend verification         | [Testing](docs/TESTING.md)             |
+| Measure performance and cleanup    | [Performance](docs/PERFORMANCE.md)     |
 | Inspect a browser failure          | [Observability](docs/OBSERVABILITY.md) |
 | Make a change                      | [Contributing](docs/CONTRIBUTING.md)   |
 | See what is next                   | [Roadmap](docs/ROADMAP.md)             |
