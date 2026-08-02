@@ -35,4 +35,4 @@ These rules keep the simulation deterministic, the browser boundary understandab
 
 Keep a change limited to one coherent milestone or maintenance task. Do not mix unrelated cleanup into feature work. Review generated Wasm and lockfile changes deliberately.
 
-The current implementation scope includes the Babylon lifecycle, the Worker readiness bridge, the placeholder scene, the pure orthographic camera model, named camera actions, coordinate conversion, diagnostics, and their tests. Picking, entity-to-visual mappings, React, persistence, gameplay systems, and the test bridge belong to later milestones.
+The current implementation scope includes the Babylon lifecycle, the Worker readiness bridge, the placeholder scene, the pure orthographic camera model, named camera actions, coordinate conversion, authoritative grid occupancy, the debug-grid projection, diagnostics, and their tests. Picking, entity-to-visual mappings, React, persistence, gameplay systems, and the test bridge belong to later milestones.

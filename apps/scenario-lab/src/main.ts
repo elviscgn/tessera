@@ -13,6 +13,7 @@ const cameraRotation = document.querySelector<HTMLElement>('#cameraRotation');
 const cameraZoom = document.querySelector<HTMLElement>('#cameraZoom');
 const cameraTarget = document.querySelector<HTMLElement>('#cameraTarget');
 const pointerCell = document.querySelector<HTMLElement>('#pointerCell');
+const occupiedCells = document.querySelector<HTMLElement>('#occupiedCells');
 const cameraButtons = document.querySelectorAll<HTMLButtonElement>('[data-camera-action]');
 
 if (
@@ -22,7 +23,8 @@ if (
   !cameraRotation ||
   !cameraZoom ||
   !cameraTarget ||
-  !pointerCell
+  !pointerCell ||
+  !occupiedCells
 ) {
   throw new Error('The Scenario Lab foundation mount is missing.');
 }
@@ -68,8 +70,10 @@ const setSynchronizationDiagnostics = (diagnostics: FoundationDiagnostics): void
   telemetry.dataset.tesseraSnapshotGeneration = String(diagnostics.lastSnapshotGeneration);
   telemetry.dataset.tesseraRenderTick = String(diagnostics.lastRenderTick);
   telemetry.dataset.tesseraRenderEntityCount = String(diagnostics.lastEntityCount);
+  telemetry.dataset.tesseraOccupiedCellCount = String(diagnostics.renderer.occupiedCellCount ?? 0);
   telemetry.dataset.tesseraRenderFrames = String(diagnostics.renderer.renderFrames);
   telemetry.dataset.tesseraRendererSnapshots = String(diagnostics.renderer.receivedSnapshots);
+  occupiedCells.textContent = String(diagnostics.renderer.occupiedCellCount ?? 0);
 };
 
 const setOptionalDiagnostics = (diagnostics: FoundationDiagnostics): void => {

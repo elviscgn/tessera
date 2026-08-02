@@ -33,7 +33,8 @@ The Rust suite covers the rules that must be identical in native and browser run
 - ChaCha8 reference vectors and seeded random commands;
 - canonical BLAKE3 hashes;
 - replay across idle ticks and rejected replay order;
-- grid, occupancy, footprints, serialization, migration, and invariants as those systems land.
+- normalized footprints, rotated cell expansion, atomic occupancy claims, overlap rejection, move/remove release, and entity/occupancy invariants;
+- serialization, migration, and persistence fixtures as those systems land.
 
 The protocol crate also tests little-endian command/event/render records, lengths, flags, opcodes, region descriptors, and contiguous event sequences.
 
@@ -58,10 +59,10 @@ The Scenario Lab is the first browser smoke target. It checks the canvas, Babylo
 The probe uses structured `data-tessera-*` attributes so browser tests can assert ticks, hashes, sequence numbers, buffer ownership, and render generations without relying on timing or pixels alone. The known native/Wasm probe hash is:
 
 ```text
-24ebdfb8bf10251c184a2bcd57d48a6b7d77be51114fbcf75847f77f32adb104
+1d58e8e0cf937e92279a5206ca3d4e8d24b046b9545568695bc262dd0ed4967c
 ```
 
-Grid, selection, placement, save/load, visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
+The render probe also validates the authoritative occupied-cell region and its typed-array decoder. Selection, placement, save/load, visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
 
 ## Visual tests
 

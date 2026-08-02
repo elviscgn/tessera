@@ -78,6 +78,8 @@ pub enum RenderRegionKind {
     AnimationState = 8,
     /// Presentation animation phase.
     AnimationPhase = 9,
+    /// Occupied grid cells `(x, z, elevation)` used by the debug grid.
+    OccupiedCell = 10,
 }
 
 /// Scalar encodings used by render regions.
@@ -405,9 +407,30 @@ pub fn encode_render_snapshot(
     snapshot_generation: u64,
     memory_generation: u32,
 ) -> Result<Vec<u8>, ProtocolError> {
+    encode_render_snapshot_with_occupied_cells(
+        entities,
+        &[],
+        simulation_tick,
+        world_generation,
+        snapshot_generation,
+        memory_generation,
+    )
+}
+
+/// Encodes a renderer-neutral snapshot with an optional authoritative occupancy region.
+pub fn encode_render_snapshot_with_occupied_cells(
+    entities: &[EntityState],
+    occupied_cells: &[GridPosition],
+    simulation_tick: u64,
+    world_generation: u32,
+    snapshot_generation: u64,
+    memory_generation: u32,
+) -> Result<Vec<u8>, ProtocolError> {
     let entity_count = u32::try_from(entities.len())
         .map_err(|_| ProtocolError::new(ProtocolErrorCode::InvalidRegion, 40))?;
-    let region_count = 9_u16;
+    let occupied_count = u32::try_from(occupied_cells.len())
+        .map_err(|_| ProtocolError::new(ProtocolErrorCode::InvalidRegion, 40))?;
+    let region_count = 9_u16 + u16::from(!occupied_cells.is_empty());
     let table_length = usize::from(region_count)
         .checked_mul(RENDER_REGION_DESCRIPTOR_LEN)
         .ok_or(ProtocolError::new(ProtocolErrorCode::InvalidRegion, 56))?;
@@ -547,6 +570,25 @@ pub fn encode_render_snapshot(
         start,
         bytes.len().saturating_sub(start),
     );
+
+    if !occupied_cells.is_empty() {
+        let start = bytes.len();
+        for cell in occupied_cells {
+            bytes.extend_from_slice(&cell.x.to_le_bytes());
+            bytes.extend_from_slice(&cell.z.to_le_bytes());
+            bytes.extend_from_slice(&cell.elevation_mm.to_le_bytes());
+        }
+        regions.push(RenderRegionDescriptor {
+            kind: RenderRegionKind::OccupiedCell,
+            scalar_type: RenderScalarType::I32,
+            component_count: 3,
+            flags: 0,
+            offset: u32::try_from(start).unwrap_or(u32::MAX),
+            element_count: occupied_count,
+            byte_length: u32::try_from(bytes.len().saturating_sub(start)).unwrap_or(u32::MAX),
+            capacity: u32::try_from(bytes.len().saturating_sub(start)).unwrap_or(u32::MAX),
+        });
+    }
 
     if bytes.len() > MAX_RENDER_BYTES {
         return Err(ProtocolError::new(
@@ -1012,6 +1054,8 @@ fn rejection_reason(code: u8) -> Result<RejectionReason, ProtocolError> {
         4 => Ok(RejectionReason::InvalidObjectType),
         5 => Ok(RejectionReason::UnknownEntity),
         6 => Ok(RejectionReason::GenerationExhausted),
+        7 => Ok(RejectionReason::OccupiedCell),
+        8 => Ok(RejectionReason::InvalidFootprint),
         _ => Err(ProtocolError::new(ProtocolErrorCode::InvalidPayload, 24)),
     }
 }
@@ -1335,6 +1379,37 @@ mod tests {
         assert_eq!(
             decode_render_descriptor(&encode_render_descriptor(descriptor)),
             Ok(descriptor)
+        );
+    }
+
+    #[test]
+    fn render_snapshot_can_carry_authoritative_occupied_cells() {
+        let encoded = encode_render_snapshot_with_occupied_cells(
+            &[],
+            &[GridPosition::new(-2, 3, 100), GridPosition::new(-1, 3, 100)],
+            8,
+            1,
+            5,
+            0,
+        )
+        .unwrap();
+        assert_eq!(u16::from_le_bytes(encoded[52..54].try_into().unwrap()), 10);
+        let occupied_offset = RENDER_HEADER_LEN + 9 * RENDER_REGION_DESCRIPTOR_LEN;
+        assert_eq!(
+            u16::from_le_bytes(
+                encoded[occupied_offset..occupied_offset + 2]
+                    .try_into()
+                    .unwrap()
+            ),
+            RenderRegionKind::OccupiedCell as u16
+        );
+        assert_eq!(
+            u32::from_le_bytes(
+                encoded[occupied_offset + 12..occupied_offset + 16]
+                    .try_into()
+                    .unwrap()
+            ),
+            2
         );
     }
 

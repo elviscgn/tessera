@@ -10,10 +10,11 @@ Tessera is delivered in small checkpoints so each release keeps a clear, reviewa
 - **Milestone 2B — packed data boundary:** render snapshots, reliable event batches, transferable buffers, memory-growth recovery, and parity fixtures.
 - **Milestone 3 — renderer lifecycle:** Babylon engine and scene ownership, Worker readiness, placeholder rendering, diagnostics, and idempotent disposal.
 - **Milestone 4 — isometric camera and coordinates:** right-handed orthographic projection, four rotations, pan/zoom/focus, floor-based grid conversion, and the camera laboratory.
+- **Milestone 5 — grid and occupancy:** normalized integer footprints, deterministic occupancy claims, atomic move/remove updates, invariant checks, and the packed debug-grid projection.
 
 ## Next
 
-**Milestone 5 — grid and occupancy** is the next implementation checkpoint. It will add authoritative occupancy, integer footprints, elevation invariants, and placement-cell visualization.
+**Milestone 6 — picking and selection** is the next implementation checkpoint. It will add stable selection IDs, screen-space bounds, and explicit synchronization waits.
 
 ## Planned checkpoints
 

@@ -59,6 +59,8 @@ The workspace has four crates from the beginning:
 
 The core uses a generational arena and parallel component stores. An entity is `(slot: u32, generation: u32)`, and renderer mappings reject a stale generation. Active slots are visited in a stable order. This keeps mutation straightforward while making replay, serialization, and native/Wasm comparison explicit.
 
+Placement is indexed separately from the entity arena. A normalized `Footprint` stores sorted integer offsets, and an `OccupancyGrid` maps each expanded `(x, z, elevation)` cell to one generational entity ID. Spawn, move, and remove validate the complete candidate set before mutating either store; a failed claim emits a rejection and leaves the world unchanged. The registry accepts object-specific footprints before work starts and falls back to a one-cell footprint for unregistered object types.
+
 ## Authority and determinism
 
 The simulation runs at a fixed 20 Hz. Rust advances ticks; the browser only requests commands, pause/resume, exact steps, or a speed setting. Live commands carry monotonic client sequences and are scheduled for the next unstarted tick. Ordering is `(scheduled tick, client sequence, batch order)`.
@@ -95,7 +97,7 @@ The camera is a right-handed orthographic projection aligned with glTF. `+X` is 
 
 ## Current implementation
 
-Milestones 3 and 4 provide the lifecycle and camera foundation:
+Milestones 3 through 5 provide the lifecycle, camera, and occupancy foundation:
 
 - `FoundationRuntime` owns one Worker, one renderer, listeners, pending requests, readiness, diagnostics, and disposal;
 - `BabylonRenderer` creates a WebGL2 engine, right-handed scene, temporary camera, light, and one non-pickable placeholder box;
@@ -104,8 +106,10 @@ Milestones 3 and 4 provide the lifecycle and camera foundation:
 - `dispose()` is idempotent, including the Scenario Lab `pagehide` path.
 - `CameraProjection` provides deterministic grid centres, floor-based cell lookup, four rotations, pan/zoom/focus, and ray-plane conversion;
 - the Babylon camera is orthographic and follows the projection model, while Scenario Lab exposes named camera actions and coordinate readouts.
+- `Footprint` and `OccupancyGrid` provide normalized integer placement cells, atomic claims/replacements/releases, and a canonical invariant check;
+- the render snapshot can carry an optional occupied-cell region, which the browser copies into a disposable grid and translucent cell overlay without making it authoritative.
 
-The public entry point currently exposes lifecycle/readiness primitives and the presentation camera model. Grid placement, picking, entity-to-visual reconciliation, persistence, the development test bridge, and the consumer-facing scenario API are added in later milestones.
+The public entry point currently exposes lifecycle/readiness primitives and the presentation camera model. Placement commands, picking, entity-to-visual reconciliation, persistence, the development test bridge, and the consumer-facing scenario API are added in later milestones.
 
 ## Deliberate exclusions
 

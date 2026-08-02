@@ -5,10 +5,11 @@ import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import type { LinesMesh } from '@babylonjs/core/Meshes/linesMesh';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Scene } from '@babylonjs/core/scene';
 import './register-loaders.js';
-import type { RenderSnapshotMetadata } from '../worker/data-protocol';
+import type { RenderGridCell, RenderSnapshotMetadata } from '../worker/data-protocol';
 import { CameraProjection, type CameraViewport } from './isometric-camera';
 
 /** Renderer-only counters exposed by the foundation runtime. */
@@ -18,6 +19,7 @@ export interface RendererDiagnostics {
   readonly lastSnapshotGeneration: bigint;
   readonly lastSimulationTick: bigint;
   readonly lastEntityCount: number;
+  readonly occupiedCellCount?: number;
   readonly disposed: boolean;
 }
 
@@ -35,8 +37,13 @@ export class BabylonRenderer {
   private readonly light: HemisphericLight;
   private readonly placeholder: ReturnType<typeof MeshBuilder.CreateBox>;
   private readonly placeholderMaterial: StandardMaterial;
+  private readonly debugGridMaterial: StandardMaterial;
+  private readonly occupiedMaterial: StandardMaterial;
   private readonly cameraProjection: CameraProjection;
   private readonly unsubscribeCamera: () => void;
+  private debugGrid: LinesMesh | undefined;
+  private debugGridKey = '';
+  private occupiedVisuals: Array<ReturnType<typeof MeshBuilder.CreateBox>> = [];
   private disposed = false;
   private started = false;
   private renderFrames = 0;
@@ -44,6 +51,7 @@ export class BabylonRenderer {
   private lastSnapshotGeneration = 0n;
   private lastSimulationTick = 0n;
   private lastEntityCount = 0;
+  private lastOccupiedCellCount = 0;
 
   private readonly renderFrame = (): void => {
     if (!this.disposed) {
@@ -85,8 +93,6 @@ export class BabylonRenderer {
     this.camera.minZ = 0.1;
     this.camera.maxZ = 1000;
     this.scene.activeCamera = this.camera;
-    this.unsubscribeCamera = this.cameraProjection.subscribe(this.syncCamera);
-
     this.light = new HemisphericLight(
       'tessera-foundation-light',
       new Vector3(0, 1, -0.25),
@@ -108,6 +114,21 @@ export class BabylonRenderer {
     this.placeholder.material = this.placeholderMaterial;
     this.placeholder.isPickable = false;
 
+    this.debugGridMaterial = new StandardMaterial('tessera-foundation-grid-material', this.scene);
+    this.debugGridMaterial.emissiveColor = new Color3(0.12, 0.2, 0.3);
+    this.debugGridMaterial.alpha = 0.55;
+    this.debugGridMaterial.disableLighting = true;
+    this.occupiedMaterial = new StandardMaterial(
+      'tessera-foundation-occupied-material',
+      this.scene,
+    );
+    this.occupiedMaterial.diffuseColor = new Color3(0.95, 0.45, 0.2);
+    this.occupiedMaterial.emissiveColor = new Color3(0.25, 0.08, 0.02);
+    this.occupiedMaterial.alpha = 0.32;
+    this.occupiedMaterial.disableLighting = true;
+
+    this.unsubscribeCamera = this.cameraProjection.subscribe(this.syncCamera);
+
     this.scene.onBeforeRenderObservable.add(this.beforeRender);
     window.addEventListener('resize', this.resize);
     this.syncCamera();
@@ -126,7 +147,10 @@ export class BabylonRenderer {
    * Consumes only validated snapshot metadata. The bytes are already owned by
    * the caller and are returned to the Worker immediately after this method.
    */
-  public consumeSnapshot(snapshot: RenderSnapshotMetadata): void {
+  public consumeSnapshot(
+    snapshot: RenderSnapshotMetadata,
+    occupiedCells: readonly RenderGridCell[] = [],
+  ): void {
     if (this.disposed) {
       throw new Error('tessera:renderer:disposed:cannot consume a snapshot after disposal');
     }
@@ -134,6 +158,7 @@ export class BabylonRenderer {
     this.lastSnapshotGeneration = snapshot.snapshotGeneration;
     this.lastSimulationTick = snapshot.simulationTick;
     this.lastEntityCount = snapshot.entityCount;
+    this.updateOccupiedOverlay(occupiedCells);
   }
 
   public diagnostics(): RendererDiagnostics {
@@ -143,6 +168,7 @@ export class BabylonRenderer {
       lastSnapshotGeneration: this.lastSnapshotGeneration,
       lastSimulationTick: this.lastSimulationTick,
       lastEntityCount: this.lastEntityCount,
+      occupiedCellCount: this.lastOccupiedCellCount,
       disposed: this.disposed,
     };
   }
@@ -157,8 +183,13 @@ export class BabylonRenderer {
     this.scene.onBeforeRenderObservable.removeCallback(this.beforeRender);
     window.removeEventListener('resize', this.resize);
     this.unsubscribeCamera();
+    this.debugGrid?.dispose();
+    this.debugGrid = undefined;
+    this.disposeOccupiedVisuals();
     this.placeholder.dispose(false, true);
     this.placeholderMaterial.dispose();
+    this.debugGridMaterial.dispose();
+    this.occupiedMaterial.dispose();
     this.light.dispose();
     this.camera.dispose();
     this.scene.dispose();
@@ -199,5 +230,77 @@ export class BabylonRenderer {
     this.camera.orthoTop = bounds.top / 1000;
     this.camera.orthoBottom = bounds.bottom / 1000;
     this.camera.maxZ = Math.max(1000, (pose.distanceMm / 1000) * 4);
+    this.updateDebugGrid();
+  };
+
+  private readonly updateDebugGrid = (): void => {
+    if (this.disposed) {
+      return;
+    }
+    const target = this.cameraProjection.worldToGrid(this.cameraProjection.state.targetMm);
+    const halfExtent = 8;
+    const key = `${target.x}:${target.z}:${this.cameraProjection.tileSizeMm}`;
+    if (this.debugGridKey === key && this.debugGrid !== undefined) {
+      return;
+    }
+    this.debugGridKey = key;
+    this.debugGrid?.dispose();
+    const tileSize = this.cameraProjection.tileSizeMm / 1000;
+    const minX = target.x - halfExtent;
+    const maxX = target.x + halfExtent;
+    const minZ = target.z - halfExtent;
+    const maxZ = target.z + halfExtent;
+    const lines: Vector3[][] = [];
+    for (let x = minX; x <= maxX + 1; x += 1) {
+      lines.push([
+        new Vector3(x * tileSize, 0.002, minZ * tileSize),
+        new Vector3(x * tileSize, 0.002, (maxZ + 1) * tileSize),
+      ]);
+    }
+    for (let z = minZ; z <= maxZ + 1; z += 1) {
+      lines.push([
+        new Vector3(minX * tileSize, 0.002, z * tileSize),
+        new Vector3((maxX + 1) * tileSize, 0.002, z * tileSize),
+      ]);
+    }
+    this.debugGrid = MeshBuilder.CreateLineSystem(
+      'tessera-foundation-debug-grid',
+      { lines },
+      this.scene,
+    );
+    this.debugGrid.color = this.debugGridMaterial.emissiveColor;
+    this.debugGrid.isPickable = false;
+  };
+
+  private readonly updateOccupiedOverlay = (cells: readonly RenderGridCell[]): void => {
+    if (this.disposed) {
+      return;
+    }
+    this.disposeOccupiedVisuals();
+    const tileSize = this.cameraProjection.tileSizeMm / 1000;
+    for (const cell of cells) {
+      const visual = MeshBuilder.CreateBox(
+        `tessera-foundation-occupied-${cell.x}-${cell.z}-${cell.elevationMm}`,
+        { width: tileSize, depth: tileSize, height: 0.04 },
+        this.scene,
+      );
+      visual.position.set(
+        (cell.x + 0.5) * tileSize,
+        cell.elevationMm / 1000 + 0.02,
+        (cell.z + 0.5) * tileSize,
+      );
+      visual.material = this.occupiedMaterial;
+      visual.isPickable = false;
+      this.occupiedVisuals.push(visual);
+    }
+    this.lastOccupiedCellCount = cells.length;
+  };
+
+  private readonly disposeOccupiedVisuals = (): void => {
+    for (const visual of this.occupiedVisuals) {
+      visual.dispose(false, false);
+    }
+    this.occupiedVisuals = [];
+    this.lastOccupiedCellCount = 0;
   };
 }

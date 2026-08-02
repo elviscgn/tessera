@@ -1,7 +1,9 @@
 import { BabylonRenderer, type RendererDiagnostics } from '../renderer/babylon-renderer';
 import {
+  decodeOccupiedCells,
   decodeEventBatch,
   decodeRenderSnapshot,
+  type RenderGridCell,
   type RenderSnapshotMetadata,
 } from '../worker/data-protocol';
 import {
@@ -44,7 +46,10 @@ export interface FoundationReady {
 
 export interface FoundationRenderer {
   start(): void;
-  consumeSnapshot(snapshot: RenderSnapshotMetadata): void;
+  consumeSnapshot(
+    snapshot: RenderSnapshotMetadata,
+    occupiedCells?: readonly RenderGridCell[],
+  ): void;
   diagnostics(): RendererDiagnostics;
   dispose(): void;
 }
@@ -97,7 +102,7 @@ const defaultRendererFactory = (
   const renderer = new BabylonRenderer(canvas, camera);
   return {
     start: () => renderer.start(),
-    consumeSnapshot: (snapshot) => renderer.consumeSnapshot(snapshot),
+    consumeSnapshot: (snapshot, occupiedCells) => renderer.consumeSnapshot(snapshot, occupiedCells),
     diagnostics: () => renderer.diagnostics(),
     dispose: () => renderer.dispose(),
   };
@@ -359,7 +364,10 @@ export class FoundationRuntime {
       ) {
         throw new Error('render response metadata does not match its packed snapshot');
       }
-      this.renderer.consumeSnapshot(snapshot);
+      this.renderer.consumeSnapshot(
+        snapshot,
+        decodeOccupiedCells(new Uint8Array(response.buffer, 0, response.byteLength), snapshot),
+      );
       this.lastSnapshotGeneration = snapshot.snapshotGeneration;
       this.lastRenderTick = snapshot.simulationTick;
       this.lastEntityCount = snapshot.entityCount;

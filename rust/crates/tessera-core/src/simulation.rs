@@ -5,14 +5,17 @@ use crate::command::{
 };
 use crate::event::{EventKind, SimulationEvent};
 use crate::id::{EntityArena, EntityError, EntityId, EntityState};
+use crate::occupancy::{
+    Footprint, GridConfigurationError, GridInvariantError, OccupancyError, OccupancyGrid,
+};
 use crate::rng::{DeterministicRng, RNG_ALGORITHM_VERSION, Seed};
 use crate::{GridPosition, QuarterTurn};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Default and currently immutable tick rate for a scenario.
 pub const DEFAULT_TICK_RATE_HZ: u32 = 20;
 /// Version of the canonical meaningful-state encoding.
-pub const STATE_HASH_VERSION: u16 = 1;
+pub const STATE_HASH_VERSION: u16 = 2;
 /// A canonical 32-byte BLAKE3 digest.
 pub type StateHash = [u8; 32];
 
@@ -52,6 +55,8 @@ pub enum SimulationError {
     EventSequenceOverflow,
     /// The submitted batch is too large for its `u32` batch-order field.
     BatchTooLarge,
+    /// The authoritative entity and occupancy stores diverged.
+    InvariantViolation,
 }
 
 /// Errors returned while rebuilding a simulation from replay records.
@@ -82,6 +87,8 @@ pub struct Simulation {
     config: SimulationConfig,
     tick: u64,
     entities: EntityArena,
+    footprints: BTreeMap<u32, Footprint>,
+    occupancy: OccupancyGrid,
     rng: DeterministicRng,
     pending: Vec<ScheduledCommand>,
     seen_sequences: BTreeSet<u64>,
@@ -98,6 +105,8 @@ impl Simulation {
             config: SimulationConfig::new(seed),
             tick: 0,
             entities: EntityArena::new(),
+            footprints: BTreeMap::new(),
+            occupancy: OccupancyGrid::new(),
             rng: DeterministicRng::new(seed),
             pending: Vec::new(),
             seen_sequences: BTreeSet::new(),
@@ -131,6 +140,64 @@ impl Simulation {
     /// Returns the number of live entities.
     pub fn entity_count(&self) -> usize {
         self.entities.len()
+    }
+
+    /// Registers an object footprint before the world starts processing work.
+    pub fn register_object_footprint(
+        &mut self,
+        object_type: u32,
+        footprint: Footprint,
+    ) -> Result<(), GridConfigurationError> {
+        if object_type == 0 {
+            return Err(GridConfigurationError::InvalidObjectType);
+        }
+        if self.tick != 0
+            || !self.pending.is_empty()
+            || !self.seen_sequences.is_empty()
+            || !self.replay_commands.is_empty()
+            || !self.events.is_empty()
+            || !self.entities.is_empty()
+        {
+            return Err(GridConfigurationError::WorldAlreadyStarted);
+        }
+        self.footprints.insert(object_type, footprint);
+        Ok(())
+    }
+
+    /// Returns the registered footprint for an object type, if any.
+    pub fn object_footprint(&self, object_type: u32) -> Option<&Footprint> {
+        self.footprints.get(&object_type)
+    }
+
+    /// Iterates occupied cells in canonical coordinate order.
+    pub fn occupied_cells(&self) -> impl Iterator<Item = GridPosition> + '_ {
+        self.occupancy.cells()
+    }
+
+    /// Returns the number of occupied grid cells.
+    pub fn occupied_cell_count(&self) -> usize {
+        self.occupancy.len()
+    }
+
+    /// Verifies that every live entity's footprint exactly matches the index.
+    pub fn validate_invariants(&self) -> Result<(), GridInvariantError> {
+        let mut expected = BTreeMap::new();
+        for entity in self.entities.iter() {
+            let cells = self
+                .footprint_for(entity.object_type)
+                .occupied_cells(entity.position, entity.rotation)
+                .map_err(|_| GridInvariantError::OccupancyMismatch)?;
+            for cell in cells {
+                if expected.insert(cell, entity.id).is_some() {
+                    return Err(GridInvariantError::OccupancyMismatch);
+                }
+            }
+        }
+        let actual: Vec<_> = self.occupancy.entries().collect();
+        let expected: Vec<_> = expected.into_iter().collect();
+        (actual == expected)
+            .then_some(())
+            .ok_or(GridInvariantError::OccupancyMismatch)
     }
 
     /// Returns how many ChaCha8 words have been consumed.
@@ -322,7 +389,13 @@ impl Simulation {
             out.extend_from_slice(&sequence.to_le_bytes());
         }
         out.extend_from_slice(&self.next_event_sequence.to_le_bytes());
+        out.extend_from_slice(&(self.footprints.len() as u64).to_le_bytes());
+        for (object_type, footprint) in &self.footprints {
+            out.extend_from_slice(&object_type.to_le_bytes());
+            footprint.encode_canonical(&mut out);
+        }
         self.entities.encode_canonical(&mut out);
+        self.occupancy.encode_canonical(&mut out);
 
         let mut pending = self.pending.clone();
         pending.sort_by_key(|command| {
@@ -368,12 +441,22 @@ impl Simulation {
                     return self
                         .reject(command.client_sequence, RejectionReason::InvalidObjectType);
                 }
+                let cells = match self.cells_for_transform(object_type, position, rotation) {
+                    Ok(cells) => cells,
+                    Err(reason) => return self.reject(command.client_sequence, reason),
+                };
+                if let Err(error) = self.occupancy.check_available(&cells, None) {
+                    return self.reject(command.client_sequence, error.rejection_reason());
+                }
                 let entity = match self.entities.spawn(object_type, position, rotation) {
                     Ok(entity) => entity,
                     Err(error) => {
                         return self.reject(command.client_sequence, error.rejection_reason());
                     }
                 };
+                self.occupancy
+                    .occupy(entity.id, &cells)
+                    .map_err(|_| SimulationError::InvariantViolation)?;
                 self.accept(command.client_sequence)?;
                 self.emit(EventKind::EntitySpawned {
                     client_sequence: command.client_sequence,
@@ -388,19 +471,31 @@ impl Simulation {
                     return self
                         .reject(command.client_sequence, RejectionReason::InvalidObjectType);
                 }
-                let random = self.rng.next_u64();
+                let mut candidate_rng = self.rng.clone();
+                let random = candidate_rng.next_u64();
                 let position = GridPosition::new(
                     (random % 2049) as i32 - 1024,
                     ((random >> 16) % 2049) as i32 - 1024,
                     0,
                 );
                 let rotation = QuarterTurn::from_index((random >> 32) as u8);
+                let cells = match self.cells_for_transform(object_type, position, rotation) {
+                    Ok(cells) => cells,
+                    Err(reason) => return self.reject(command.client_sequence, reason),
+                };
+                if let Err(error) = self.occupancy.check_available(&cells, None) {
+                    return self.reject(command.client_sequence, error.rejection_reason());
+                }
                 let entity = match self.entities.spawn(object_type, position, rotation) {
                     Ok(entity) => entity,
                     Err(error) => {
                         return self.reject(command.client_sequence, error.rejection_reason());
                     }
                 };
+                self.rng = candidate_rng;
+                self.occupancy
+                    .occupy(entity.id, &cells)
+                    .map_err(|_| SimulationError::InvariantViolation)?;
                 self.accept(command.client_sequence)?;
                 self.emit(EventKind::EntitySpawned {
                     client_sequence: command.client_sequence,
@@ -415,12 +510,33 @@ impl Simulation {
                 position,
                 rotation,
             } => {
+                let current = match self.entities.get(entity) {
+                    Some(entity) => entity,
+                    None => {
+                        return self
+                            .reject(command.client_sequence, RejectionReason::UnknownEntity);
+                    }
+                };
+                let old_cells = self
+                    .cells_for_transform(current.object_type, current.position, current.rotation)
+                    .map_err(|_| SimulationError::InvariantViolation)?;
+                let new_cells =
+                    match self.cells_for_transform(current.object_type, position, rotation) {
+                        Ok(cells) => cells,
+                        Err(reason) => return self.reject(command.client_sequence, reason),
+                    };
+                if let Err(error) = self.occupancy.check_available(&new_cells, Some(entity)) {
+                    return self.reject(command.client_sequence, error.rejection_reason());
+                }
                 let entity = match self.entities.move_entity(entity, position, rotation) {
                     Ok(entity) => entity,
                     Err(error) => {
                         return self.reject(command.client_sequence, error.rejection_reason());
                     }
                 };
+                self.occupancy
+                    .replace(entity.id, &old_cells, &new_cells)
+                    .map_err(|_| SimulationError::InvariantViolation)?;
                 self.accept(command.client_sequence)?;
                 self.emit(EventKind::EntityMoved {
                     client_sequence: command.client_sequence,
@@ -430,12 +546,25 @@ impl Simulation {
                 })
             }
             Command::Remove { entity } => {
+                let current = match self.entities.get(entity) {
+                    Some(entity) => entity,
+                    None => {
+                        return self
+                            .reject(command.client_sequence, RejectionReason::UnknownEntity);
+                    }
+                };
+                let old_cells = self
+                    .cells_for_transform(current.object_type, current.position, current.rotation)
+                    .map_err(|_| SimulationError::InvariantViolation)?;
                 let removed = match self.entities.despawn(entity) {
                     Ok(entity) => entity,
                     Err(error) => {
                         return self.reject(command.client_sequence, error.rejection_reason());
                     }
                 };
+                self.occupancy
+                    .release(removed.id, &old_cells)
+                    .map_err(|_| SimulationError::InvariantViolation)?;
                 self.accept(command.client_sequence)?;
                 self.emit(EventKind::EntityRemoved {
                     client_sequence: command.client_sequence,
@@ -443,6 +572,24 @@ impl Simulation {
                 })
             }
         }
+    }
+
+    fn footprint_for(&self, object_type: u32) -> &Footprint {
+        static DEFAULT_FOOTPRINT: std::sync::OnceLock<Footprint> = std::sync::OnceLock::new();
+        self.footprints
+            .get(&object_type)
+            .unwrap_or_else(|| DEFAULT_FOOTPRINT.get_or_init(Footprint::single_cell))
+    }
+
+    fn cells_for_transform(
+        &self,
+        object_type: u32,
+        position: GridPosition,
+        rotation: QuarterTurn,
+    ) -> Result<Vec<GridPosition>, RejectionReason> {
+        self.footprint_for(object_type)
+            .occupied_cells(position, rotation)
+            .map_err(|_| RejectionReason::InvalidFootprint)
     }
 
     fn accept(&mut self, client_sequence: u64) -> Result<(), SimulationError> {
@@ -480,6 +627,17 @@ impl EntityError {
         match self {
             Self::UnknownEntity => RejectionReason::UnknownEntity,
             Self::SlotExhausted | Self::GenerationExhausted => RejectionReason::GenerationExhausted,
+        }
+    }
+}
+
+impl OccupancyError {
+    const fn rejection_reason(self) -> RejectionReason {
+        match self {
+            Self::CellOccupied { .. } => RejectionReason::OccupiedCell,
+            Self::Empty | Self::DuplicateCell { .. } | Self::NotOwned { .. } => {
+                RejectionReason::InvalidFootprint
+            }
         }
     }
 }
@@ -710,7 +868,7 @@ mod tests {
         assert_eq!(retained_hash, drained.state_hash());
         assert_eq!(
             retained.state_hash_hex(),
-            "a6181997e83e6b2bafb290da1d702e932fd61b3ff066d1c16def73c6062828b0"
+            "3495843b38d1a0debab648da03dea1d7f62386838d1b84023805b7281ed95dc9"
         );
         assert_eq!(retained.state_hash_hex().len(), 64);
         assert_eq!(drained.drain_events().len(), 2);
@@ -775,5 +933,89 @@ mod tests {
             Simulation::replay(SEED, &log),
             Err(ReplayError::TickOrderViolation)
         ));
+    }
+
+    #[test]
+    fn footprint_occupancy_rejects_overlap_and_tracks_moves_and_removals() {
+        let mut simulation = Simulation::new(SEED);
+        simulation
+            .register_object_footprint(7, crate::Footprint::rectangle(2, 1).unwrap())
+            .unwrap();
+        simulation
+            .submit_batch(&[CommandEnvelope::new(
+                1,
+                Command::Spawn {
+                    object_type: 7,
+                    position: GridPosition::new(0, 0, 250),
+                    rotation: QuarterTurn::R0,
+                },
+            )])
+            .unwrap();
+        simulation.advance_one_tick().unwrap();
+        assert_eq!(simulation.occupied_cell_count(), 2);
+        assert_eq!(
+            simulation.occupied_cells().collect::<Vec<_>>(),
+            [GridPosition::new(0, 0, 250), GridPosition::new(1, 0, 250)]
+        );
+        let entity = simulation.entities().next().unwrap();
+
+        simulation
+            .submit_batch(&[CommandEnvelope::new(
+                2,
+                Command::Spawn {
+                    object_type: 7,
+                    position: GridPosition::new(1, 0, 250),
+                    rotation: QuarterTurn::R0,
+                },
+            )])
+            .unwrap();
+        simulation.advance_one_tick().unwrap();
+        assert_eq!(simulation.entity_count(), 1);
+        assert!(matches!(
+            simulation.events().last().map(|event| &event.kind),
+            Some(EventKind::CommandRejected {
+                reason: RejectionReason::OccupiedCell,
+                ..
+            })
+        ));
+        simulation.validate_invariants().unwrap();
+
+        simulation
+            .submit_batch(&[CommandEnvelope::new(
+                3,
+                Command::Move {
+                    entity: entity.id,
+                    position: GridPosition::new(3, 0, 250),
+                    rotation: QuarterTurn::R0,
+                },
+            )])
+            .unwrap();
+        simulation.advance_one_tick().unwrap();
+        assert_eq!(
+            simulation.occupied_cells().collect::<Vec<_>>(),
+            [GridPosition::new(3, 0, 250), GridPosition::new(4, 0, 250)]
+        );
+        simulation
+            .submit_batch(&[CommandEnvelope::new(
+                4,
+                Command::Remove { entity: entity.id },
+            )])
+            .unwrap();
+        simulation.advance_one_tick().unwrap();
+        assert!(simulation.occupied_cells().next().is_none());
+        simulation.validate_invariants().unwrap();
+    }
+
+    #[test]
+    fn footprint_registration_stops_after_work_begins() {
+        let mut simulation = Simulation::new(SEED);
+        simulation
+            .register_object_footprint(4, crate::Footprint::single_cell())
+            .unwrap();
+        simulation.submit_batch(&[spawn(1, 4, 0)]).unwrap();
+        assert_eq!(
+            simulation.register_object_footprint(5, crate::Footprint::single_cell()),
+            Err(crate::GridConfigurationError::WorldAlreadyStarted)
+        );
     }
 }

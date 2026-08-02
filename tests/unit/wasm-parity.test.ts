@@ -7,12 +7,13 @@ import {
   encodeSpawnCommandBatch,
 } from '../../src/worker/bridge-protocol';
 import {
+  decodeOccupiedCells,
   decodeEventBatch,
   decodeRenderMemoryDescriptor,
   decodeRenderSnapshot,
 } from '../../src/worker/data-protocol';
 
-const PROBE_HASH = '24ebdfb8bf10251c184a2bcd57d48a6b7d77be51114fbcf75847f77f32adb104';
+const PROBE_HASH = '1d58e8e0cf937e92279a5206ca3d4e8d24b046b9545568695bc262dd0ed4967c';
 
 describe('generated web-target Wasm adapter', () => {
   it('matches the native probe checkpoint through the binary boundary', () => {
@@ -48,7 +49,13 @@ describe('generated web-target Wasm adapter', () => {
       expect(firstSnapshot.entityCount).toBe(1);
       expect(firstSnapshot.snapshotGeneration).toBe(firstDescriptor.snapshotGeneration);
       expect(firstSnapshot.memoryGeneration).toBe(0);
-      expect(firstSnapshot.regions).toHaveLength(9);
+      expect(firstSnapshot.regions).toHaveLength(10);
+      expect(
+        decodeOccupiedCells(
+          new Uint8Array(firstMemoryBuffer, firstDescriptor.pointer, firstDescriptor.byteLength),
+          firstSnapshot,
+        ),
+      ).toEqual([{ x: 0, z: 0, elevationMm: 0 }]);
 
       const eventBatch = decodeEventBatch(adapter.event_batch(0n, 1024));
       expect(eventBatch.firstSequence).toBe(1n);
