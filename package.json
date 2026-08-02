@@ -41,6 +41,7 @@
     "prepack": "pnpm build:package",
     "pack:runtime": "pnpm pack --pack-destination artifacts",
     "check:package": "node scripts/check-package.mjs",
+    "check:release": "node scripts/check-release.mjs",
     "check:external-consumer": "node scripts/check-external-consumer.mjs",
     "dev": "vite",
     "build": "pnpm build:wasm && vite build",
@@ -57,7 +58,7 @@
     "perf:native:check": "node scripts/run-native-performance.mjs --compare tests/fixtures/performance/native-baseline.json",
     "perf:browser": "node scripts/run-browser-performance.mjs",
     "check:js": "pnpm check:format && pnpm lint && pnpm typecheck && pnpm test && pnpm quality:fallow",
-    "check": "pnpm check:js && pnpm check:rust && pnpm check:wasm && pnpm build && pnpm check:package"
+    "check": "pnpm check:js && pnpm check:rust && pnpm check:wasm && pnpm build && pnpm check:package && pnpm check:release"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
