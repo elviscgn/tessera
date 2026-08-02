@@ -27,6 +27,7 @@ import type {
   FoundationError,
   FoundationReady,
   FoundationRenderer,
+  FoundationRenderInspection,
   FoundationRuntimeOptions,
   FoundationState,
   FoundationWorker,
@@ -70,6 +71,7 @@ describe('public runtime surface', () => {
     const ready: FoundationReady | undefined = undefined;
     const stateName: FoundationState = 'starting';
     const renderer: FoundationRenderer | undefined = undefined;
+    const inspection: FoundationRenderInspection | undefined = undefined;
     const worker: FoundationWorker | undefined = undefined;
     const entityId: EntityId = formatEntityId({ slot: 0, generation: 1 });
     const entityHandle: EntityHandle | undefined = parseEntityId(entityId);
@@ -99,6 +101,7 @@ describe('public runtime surface', () => {
     expect(typeof FoundationRuntime.prototype.dispose).toBe('function');
     expect(typeof FoundationRuntime.prototype.waitForReady).toBe('function');
     expect(typeof FoundationRuntime.prototype.selectedEntity).toBe('function');
+    expect(typeof FoundationRuntime.prototype.step).toBe('function');
     expect([MAX_CAMERA_ZOOM_TILES, MIN_CAMERA_ZOOM_TILES, rotation]).toHaveLength(3);
     expect([
       vector,
@@ -110,6 +113,7 @@ describe('public runtime surface', () => {
       ready,
       stateName,
       renderer,
+      inspection,
       worker,
       entityId,
       entityHandle,
@@ -123,6 +127,6 @@ describe('public runtime surface', () => {
       transformTarget,
       placement,
       preview,
-    ]).toHaveLength(22);
+    ]).toHaveLength(23);
   });
 });

@@ -6,6 +6,8 @@ import {
   type ScreenBounds,
 } from '../../../src/public/index';
 import { CameraActionLayer } from '../../../src/input/camera-action-layer';
+import { registerTesseraTestBridge } from '../../../src/public/testkit';
+import { viewportForCanvas } from '../../../src/browser/canvas-viewport';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#renderCanvas');
 const status = document.querySelector<HTMLOutputElement>('#status');
@@ -36,14 +38,6 @@ if (
 ) {
   throw new Error('The Scenario Lab foundation mount is missing.');
 }
-
-const viewport = (): { width: number; height: number } => {
-  const bounds = canvas.getBoundingClientRect();
-  return {
-    width: Math.max(1, bounds.width || canvas.clientWidth),
-    height: Math.max(1, bounds.height || canvas.clientHeight),
-  };
-};
 
 const detailDatasetKey = (key: string): string =>
   `tessera${key[0]?.toUpperCase() ?? ''}${key.slice(1)}`;
@@ -158,6 +152,17 @@ try {
     scenario: { id: 'foundation' },
     objectTypes: [{ id: 'foundation' }],
   });
+  let unregisterTestBridge: () => void = () => {
+    // The production build has no test facade to unregister.
+  };
+  if (import.meta.env.DEV) {
+    unregisterTestBridge = registerTesseraTestBridge(runtime, {
+      canvas,
+      scenario: { id: 'foundation' },
+      scenarios: [{ id: 'foundation' }],
+      overlay: { enabled: false },
+    });
+  }
   const unsubscribe = runtime.subscribeDiagnostics((diagnostics) => {
     setDiagnostics(diagnostics);
     setCameraLab(runtime);
@@ -168,7 +173,11 @@ try {
   const unsubscribeCamera = runtime.camera.subscribe(() => {
     setCameraLab(runtime);
   });
-  const actionLayer = new CameraActionLayer({ canvas, camera: runtime.camera, viewport });
+  const actionLayer = new CameraActionLayer({
+    canvas,
+    camera: runtime.camera,
+    viewport: () => viewportForCanvas(canvas),
+  });
   actionLayer.attach();
   const selectionLayer = new SelectionActionLayer({
     canvas,
@@ -221,7 +230,7 @@ try {
     const bounds = canvas.getBoundingClientRect();
     const cell = runtime.camera.screenToGrid(
       { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
-      viewport(),
+      viewportForCanvas(canvas),
       0,
     );
     setPointerCell(cell);
@@ -331,6 +340,7 @@ try {
     });
 
   const dispose = (): void => {
+    unregisterTestBridge();
     unsubscribe();
     unsubscribeCamera();
     unsubscribeSelection();

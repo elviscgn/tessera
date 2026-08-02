@@ -3,6 +3,7 @@ import {
   bytesToHex,
   decodeCommandResponse,
   decodePlacementValidation,
+  encodeEmptyCommandBatch,
   encodeMoveCommandBatch,
   encodeRemoveCommandBatch,
   encodeSpawnCommandBatch,
@@ -11,6 +12,14 @@ import {
 } from '../../src/worker/bridge-protocol';
 
 describe('Milestone 2A Worker bridge codec', () => {
+  it('encodes an empty batch for an exact clock step', () => {
+    const bytes = new Uint8Array(encodeEmptyCommandBatch());
+    const view = new DataView(bytes.buffer);
+    expect(bytes.byteLength).toBe(28);
+    expect(view.getUint32(20, true)).toBe(0);
+    expect(view.getUint32(24, true)).toBe(28);
+  });
+
   it('writes the versioned little-endian spawn batch', () => {
     const bytes = new Uint8Array(
       encodeSpawnCommandBatch({

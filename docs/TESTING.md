@@ -62,6 +62,19 @@ The Worker checks that:
 
 The Scenario Lab is the first browser smoke target. It checks the canvas, Babylon scene, orthographic camera, named pan/zoom/rotation actions, screen-to-grid readout, render loop, Worker readiness, packed snapshot delivery, event acknowledgement, memory-generation diagnostics, entity picking, selected-ID display, screen-space bounds, Rust-backed placement previews, placement/removal controls, and disposal on `pagehide`.
 
+In development builds, browser checks may use
+`@tessera/runtime/testkit` and `window.tesseraTest` for explicit readiness and
+tick waits, entity/snapshot inspection, camera state, picking, diagnostics,
+annotated captures, and reproduction manifests. The bridge is validated and
+command-oriented; it does not expose arbitrary state mutation. A production
+browser test must assert that the global is absent and that the testkit module
+is not retained by the built application.
+
+The production shell gate runs `pnpm check:production-testkit` after the Vite
+build and scans executable JavaScript chunks for the registration and global
+names. Source maps are not executable application code and are excluded from
+that check.
+
 The probe uses structured `data-tessera-*` attributes so browser tests can assert ticks, hashes, sequence numbers, buffer ownership, and render generations without relying on timing or pixels alone. The known native/Wasm probe hash is:
 
 ```text
@@ -71,6 +84,12 @@ The probe uses structured `data-tessera-*` attributes so browser tests can asser
 The render probe also validates the authoritative occupied-cell region, entity transform regions, and their typed-array decoders. Unit coverage rejects malformed entity layouts, duplicate slots, invalid generations, and stale selection handles. Browser smoke selects the rendered probe entity and checks that its `slot:generation` ID and canvas-relative bounds appear in the lab. Persistence tests exercise the public adapter boundary and the Worker save/load responses; visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
 
 Renderer reconciliation has pure unit coverage for slot updates, missing-entity removals, generation replacement, visual-type regrouping, newer-world resets, and stale snapshot rejection. Renderer diagnostics expose visual-group count, instance count, reset count, stale mapping count, and stale snapshot count so a browser stress run can prove that dropped or late projections do not resurrect presentation state.
+
+Reproduction tests validate manifest versions, command sequence records,
+relative artifact paths, checkpoint hashes, structured errors, and
+environment metadata. A captured directory is safe to copy between machines:
+large screenshots and traces remain separate artifacts, while `manifest.json`
+is enough for a native tool to validate the scenario and replay inputs.
 
 ## Visual tests
 

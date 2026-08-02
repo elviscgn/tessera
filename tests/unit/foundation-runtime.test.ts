@@ -274,6 +274,7 @@ describe('foundation runtime lifecycle', () => {
     expect(worker.terminations).toBe(1);
     expect(renderer.disposals).toBe(1);
     expect(runtime.state).toBe('disposed');
+    expect(runtime.renderInspection()).toEqual({ entities: [], occupiedCells: [] });
   });
 
   it('fails closed and disposes both owners on a startup failure', async () => {

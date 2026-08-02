@@ -109,6 +109,15 @@ The public selection path returns an opaque `EntityId` whose canonical represent
 
 The runtime also exposes explicit readiness, simulation-tick, rendered-tick, render-generation, and no-pending-error waits. These waits resolve from observed Worker and renderer state rather than from arbitrary delays, so browser tests and consumer UI can synchronize without taking ownership of the clock.
 
+Development diagnostics follow the same boundary. The optional
+`@tessera/runtime/testkit` entry point registers `window.tesseraTest` only in a
+development build. It can inspect validated snapshots, stable IDs, selection,
+camera state, synchronization metrics, and structured errors; it can submit
+the public command methods and exact-step clock pulse, but it cannot mutate a
+Rust store or access Wasm memory. Annotated overlays are disposable DOM
+presentation, and reproduction bundles are versioned manifest directories
+containing the observed commands, snapshots, hashes, logs, and environment.
+
 The project starts with ordinary Babylon instances because they support per-instance transforms and picking. Selection uses the outline renderer on the selected instance, so the selection path does not mutate a shared group material. Thin instances remain a measured performance experiment, not a default.
 
 The camera is a right-handed orthographic projection aligned with glTF. `+X` is east, `+Y` is up, and `+Z` is south. The presentation camera uses a mathematically symmetric isometric pitch, four clockwise quarter-turns, a target measured in millimetres, and a zoom expressed as visible tile height. Its pure `CameraProjection` model is shared by Babylon synchronization, screen/world/grid conversion, and the coordinate laboratory. Negative world boundaries use floor division, so `-1 mm` belongs to cell `-1` for a `1,000 mm` tile. Camera state remains presentation state and cannot affect Rust hashes or commands.
@@ -129,6 +138,15 @@ Milestones 3 through 9 provide the lifecycle, camera, occupancy, selection, plac
 - render snapshots also carry validated transform, visual-type, and flag regions; the browser copies those records before returning the transferable buffer to the Worker.
 - entity snapshots reconcile by slot, generation, and visual type; ordinary instances are grouped under disposable visual templates and removed when absent from the newest snapshot;
 - world-generation resets clear the renderer projection atomically, while stale world/snapshot generations and stale slot mappings are visible in renderer diagnostics.
+- `renderInspection()` retains defensive copies of the latest validated snapshot, entity records, and occupied cells for the development test surface; loading or disposing the runtime clears that inspection state before a new generation is accepted.
+
+## Observability
+
+The development bridge, overlay controls, and reproduction-directory contract
+are described in [Observability](OBSERVABILITY.md). They are intentionally
+outside the default runtime entry point. Browser checks can therefore exercise
+the same public command and query path as a consumer without shipping a test
+global or a raw mutation escape hatch.
 
 The public entry point currently exposes lifecycle/readiness primitives, the presentation camera model, stable selection IDs, canvas picking, screen-space bounds, declarative object definitions, Rust-backed placement queries and commands, persistence adapters, save/load methods, and synchronization waits. The development test bridge and wider consumer-facing scenario API are added in later milestones.
 

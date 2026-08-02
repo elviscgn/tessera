@@ -51,6 +51,7 @@ flowchart LR
 | **Placement**            | Rust-owned object registries, non-mutating placement queries, preview state, placement, move, and removal            |
 | **Scalable visuals**     | Visual-type groups, ordinary Babylon instances, snapshot removals, reset generations, and stale-map metrics          |
 | **Persistence**          | Rust-owned versioned JSON saves, checksums, identity validation, atomic loads, replay metadata, and browser adapters |
+| **Diagnostics**          | Development-only test bridge, deterministic waits, annotated snapshot captures, and reproduction manifests           |
 
 The authoritative grid, occupancy model, selection path, declarative placement flow, grouped renderer projection, and v0.1 persistence boundary are now in place. The wider consumer-facing scenario API and the full Scenario Lab remain in development.
 
@@ -110,13 +111,14 @@ Open the local URL printed by Vite. The complete toolchain setup is in [docs/SET
 
 ## Read next
 
-| If you want to...                  | Start here                           |
-| ---------------------------------- | ------------------------------------ |
-| Understand ownership and data flow | [Architecture](docs/ARCHITECTURE.md) |
-| Set up the pinned toolchain        | [Setup](docs/SETUP.md)               |
-| Run or extend verification         | [Testing](docs/TESTING.md)           |
-| Make a change                      | [Contributing](docs/CONTRIBUTING.md) |
-| See what is next                   | [Roadmap](docs/ROADMAP.md)           |
+| If you want to...                  | Start here                             |
+| ---------------------------------- | -------------------------------------- |
+| Understand ownership and data flow | [Architecture](docs/ARCHITECTURE.md)   |
+| Set up the pinned toolchain        | [Setup](docs/SETUP.md)                 |
+| Run or extend verification         | [Testing](docs/TESTING.md)             |
+| Inspect a browser failure          | [Observability](docs/OBSERVABILITY.md) |
+| Make a change                      | [Contributing](docs/CONTRIBUTING.md)   |
+| See what is next                   | [Roadmap](docs/ROADMAP.md)             |
 
 ## Scope
 

@@ -23,6 +23,18 @@ const MOVE_OPCODE = 3;
 const REMOVE_OPCODE = 4;
 const PLACEMENT_RESPONSE_LENGTH = 40;
 
+/**
+ * Encodes a command batch with no records. The authoritative kernel accepts
+ * this as an exact-step clock pulse; it cannot mutate gameplay state because
+ * there is no command payload to apply.
+ */
+export const encodeEmptyCommandBatch = (batchSequence = 0n): ArrayBuffer => {
+  const bytes = new Uint8Array(COMMAND_HEADER_LENGTH);
+  const view = new DataView(bytes.buffer);
+  writeCommandHeader(view, bytes, batchSequence, COMMAND_HEADER_LENGTH, 0);
+  return bytes.buffer;
+};
+
 export interface WorkerObjectTypeDefinition {
   readonly id: string;
   /** Flat, normalized `[dx, dz, ...]` footprint offsets. */
@@ -346,7 +358,7 @@ const createCommandRecord = (
   const totalLength = COMMAND_HEADER_LENGTH + RECORD_HEADER_LENGTH + payloadLength;
   const bytes = new Uint8Array(new ArrayBuffer(totalLength));
   const view = new DataView(bytes.buffer);
-  writeCommandHeader(view, bytes, batchSequence, totalLength);
+  writeCommandHeader(view, bytes, batchSequence, totalLength, 1);
   view.setUint16(COMMAND_HEADER_LENGTH, opcode, true);
   view.setUint32(COMMAND_HEADER_LENGTH + 4, payloadLength, true);
   view.setBigUint64(COMMAND_HEADER_LENGTH + RECORD_HEADER_LENGTH, clientSequence, true);
@@ -358,12 +370,13 @@ const writeCommandHeader = (
   bytes: Uint8Array,
   batchSequence: bigint,
   totalLength: number,
+  recordCount: number,
 ): void => {
   bytes.set(COMMAND_MAGIC, 0);
   view.setUint16(8, PROTOCOL_VERSION, true);
   view.setUint16(10, 0, true);
   view.setBigUint64(12, batchSequence, true);
-  view.setUint32(20, 1, true);
+  view.setUint32(20, recordCount, true);
   view.setUint32(24, totalLength, true);
 };
 

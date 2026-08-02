@@ -29,8 +29,10 @@ import {
 } from '../renderer/entity-selection';
 import {
   encodeMoveCommandBatch,
+  encodeEmptyCommandBatch,
   encodeRemoveCommandBatch,
   encodeSpawnCommandBatch,
+  MAX_EXACT_TICKS_PER_CALL,
 } from '../worker/bridge-protocol';
 import type {
   EntityTransformTarget,
@@ -65,6 +67,13 @@ export interface FoundationDiagnostics {
   readonly selectedEntityId?: EntityId;
   readonly placementPreview?: PlacementPreview;
   readonly lastError?: FoundationError;
+}
+
+/** Read-only render data exposed to the development test bridge. */
+export interface FoundationRenderInspection {
+  readonly snapshot?: RenderSnapshotMetadata;
+  readonly entities: readonly RenderEntityRecord[];
+  readonly occupiedCells: readonly RenderGridCell[];
 }
 
 export interface FoundationReady {
@@ -288,6 +297,9 @@ export class FoundationRuntime {
   private lastSnapshotGeneration = 0n;
   private lastRenderTick = 0n;
   private lastEntityCount = 0;
+  private lastRenderSnapshot: RenderSnapshotMetadata | undefined;
+  private lastRenderEntities: readonly RenderEntityRecord[] = [];
+  private lastOccupiedCells: readonly RenderGridCell[] = [];
   private lastStateHashHex: string | undefined;
   private latestMetrics: BoundaryMetrics | undefined;
   private lastError: FoundationError | undefined;
@@ -295,7 +307,7 @@ export class FoundationRuntime {
   private selectedEntityId: EntityId | undefined;
   private readonly selectionListeners = new Set<(entityId: EntityId | undefined) => void>();
   private readonly objectTypeHandles = new Map<string, number>();
-  private nextClientSequence = 1n;
+  private nextClientSequenceValue = 1n;
   private nextBatchSequence = 1n;
   private readonly persistenceAdapter: PersistenceAdapter | undefined;
   private placementPreview: PlacementPreview | undefined;
@@ -395,6 +407,13 @@ export class FoundationRuntime {
     return this.waitFor('renderGeneration', normalizeWaitTarget(target, 'render generation'));
   }
 
+  /** Resolves when a command promise has produced its authoritative receipt. */
+  public waitForCommandReceipt(
+    receipt: Promise<CommandResultResponse>,
+  ): Promise<CommandResultResponse> {
+    return receipt;
+  }
+
   public waitForNoPendingErrors(): Promise<FoundationDiagnostics> {
     if (this.currentState === 'ready' && this.lastError === undefined) {
       return Promise.resolve(this.diagnostics());
@@ -436,6 +455,26 @@ export class FoundationRuntime {
     };
   }
 
+  /** Returns a defensive copy of the latest validated render projection. */
+  public renderInspection(): FoundationRenderInspection {
+    return {
+      ...(this.lastRenderSnapshot === undefined
+        ? {}
+        : {
+            snapshot: {
+              ...this.lastRenderSnapshot,
+              regions: this.lastRenderSnapshot.regions.map((region) => ({ ...region })),
+            },
+          }),
+      entities: this.lastRenderEntities.map((entity) => ({
+        ...entity,
+        rotation: { ...entity.rotation },
+        scale: { ...entity.scale },
+      })),
+      occupiedCells: this.lastOccupiedCells.map((cell) => ({ ...cell })),
+    };
+  }
+
   public pick(point: ScreenPoint): EntityId | undefined {
     if (this.currentState === 'disposed' || this.currentState === 'fatal') {
       return undefined;
@@ -464,6 +503,11 @@ export class FoundationRuntime {
   /** Returns the Rust-assigned handle for a configured public object ID. */
   public objectTypeHandle(id: string): number | undefined {
     return this.objectTypeHandles.get(id);
+  }
+
+  /** Returns the next client sequence the runtime will assign to gameplay. */
+  public nextClientSequence(): bigint {
+    return this.nextClientSequenceValue;
   }
 
   /** Queries Rust occupancy without mutating the world. */
@@ -600,6 +644,22 @@ export class FoundationRuntime {
     }));
   }
 
+  /** Advances exact ticks without submitting a gameplay command. */
+  public step(exactTicks = 1): Promise<CommandResultResponse> {
+    if (
+      !Number.isSafeInteger(exactTicks) ||
+      exactTicks < 0 ||
+      exactTicks > MAX_EXACT_TICKS_PER_CALL
+    ) {
+      return Promise.reject(
+        new Error(
+          `tessera:step:invalid_ticks:exact ticks must be an integer between 0 and ${MAX_EXACT_TICKS_PER_CALL}`,
+        ),
+      );
+    }
+    return this.submitCommand(encodeEmptyCommandBatch(), exactTicks);
+  }
+
   public requestMetrics(): Promise<BoundaryMetrics> {
     if (this.currentState === 'disposed') {
       return Promise.reject(new Error('tessera:runtime:disposed:runtime has been disposed'));
@@ -672,6 +732,9 @@ export class FoundationRuntime {
     this.detachWorker();
     this.terminateWorker();
     this.renderer.dispose();
+    this.lastRenderSnapshot = undefined;
+    this.lastRenderEntities = [];
+    this.lastOccupiedCells = [];
     if (!this.readySettled) {
       this.readySettled = true;
       this.rejectReady(disposeError);
@@ -741,8 +804,11 @@ export class FoundationRuntime {
     this.lastStateHashHex = response.stateHashHex;
     this.latestMetrics = response.metrics;
     this.lastError = undefined;
-    this.nextClientSequence = response.nextClientSequence;
+    this.nextClientSequenceValue = response.nextClientSequence;
     this.eventReceiver.reset();
+    this.lastRenderSnapshot = undefined;
+    this.lastRenderEntities = [];
+    this.lastOccupiedCells = [];
     this.setSelectedEntity(undefined);
     this.applyPlacementPreview(undefined);
     const pending = this.pendingLoads.get(response.requestId);
@@ -837,16 +903,18 @@ export class FoundationRuntime {
       ) {
         throw new Error('render response metadata does not match its packed snapshot');
       }
-      const applied = this.renderer.consumeSnapshot(
-        snapshot,
-        decodeOccupiedCells(new Uint8Array(response.buffer, 0, response.byteLength), snapshot),
-        decodeRenderEntities(new Uint8Array(response.buffer, 0, response.byteLength), snapshot),
-      );
+      const snapshotBytes = new Uint8Array(response.buffer, 0, response.byteLength);
+      const occupiedCells = decodeOccupiedCells(snapshotBytes, snapshot);
+      const entities = decodeRenderEntities(snapshotBytes, snapshot);
+      const applied = this.renderer.consumeSnapshot(snapshot, occupiedCells, entities);
       this.latestMetrics = response.metrics;
       if (applied !== false) {
         this.lastSnapshotGeneration = snapshot.snapshotGeneration;
         this.lastRenderTick = snapshot.simulationTick;
         this.lastEntityCount = snapshot.entityCount;
+        this.lastRenderSnapshot = snapshot;
+        this.lastRenderEntities = entities;
+        this.lastOccupiedCells = occupiedCells;
       }
     } catch (error: unknown) {
       failure = asError(error);
@@ -989,12 +1057,12 @@ export class FoundationRuntime {
     readonly clientSequence: bigint;
     readonly batchSequence: bigint;
   } {
-    const clientSequence = this.nextClientSequence;
+    const clientSequence = this.nextClientSequenceValue;
     const batchSequence = this.nextBatchSequence;
     if (clientSequence === 0xffff_ffff_ffff_ffffn || batchSequence === 0xffff_ffff_ffff_ffffn) {
       throw new Error('tessera:command:sequence_exhausted:command sequence space is exhausted');
     }
-    this.nextClientSequence += 1n;
+    this.nextClientSequenceValue += 1n;
     this.nextBatchSequence += 1n;
     return { clientSequence, batchSequence };
   }

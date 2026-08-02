@@ -13,6 +13,7 @@ export {
   type FoundationError,
   type FoundationReady,
   type FoundationRenderer,
+  type FoundationRenderInspection,
   type FoundationRuntimeOptions,
   type FoundationState,
   type FoundationWorker,
