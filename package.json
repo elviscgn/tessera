@@ -1,8 +1,25 @@
 {
-  "name": "tessera",
+  "name": "@tessera/runtime",
   "version": "0.0.0",
   "private": true,
+  "description": "A deterministic Rust/Wasm runtime for browser-based isometric worlds.",
   "type": "module",
+  "files": [
+    "dist/package",
+    "LICENSE",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/package/public/index.d.ts",
+      "import": "./dist/package/index.js"
+    },
+    "./testkit": {
+      "types": "./dist/package/public/testkit.d.ts",
+      "import": "./dist/package/testkit.js"
+    }
+  },
+  "types": "./dist/package/public/index.d.ts",
   "sideEffects": [
     "src/renderer/register-loaders.js"
   ],
@@ -20,6 +37,11 @@
     "check:rust": "cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings && cargo test --manifest-path rust/Cargo.toml --workspace --all-targets",
     "build:wasm": "node scripts/build-wasm.mjs",
     "check:wasm": "pnpm build:wasm",
+    "build:package": "node scripts/build-package.mjs",
+    "prepack": "pnpm build:package",
+    "pack:runtime": "pnpm pack --pack-destination artifacts",
+    "check:package": "node scripts/check-package.mjs",
+    "check:external-consumer": "node scripts/check-external-consumer.mjs",
     "dev": "vite",
     "build": "pnpm build:wasm && vite build",
     "check:production-testkit": "node scripts/check-production-testkit.mjs",
@@ -35,7 +57,7 @@
     "perf:native:check": "node scripts/run-native-performance.mjs --compare tests/fixtures/performance/native-baseline.json",
     "perf:browser": "node scripts/run-browser-performance.mjs",
     "check:js": "pnpm check:format && pnpm lint && pnpm typecheck && pnpm test && pnpm quality:fallow",
-    "check": "pnpm check:js && pnpm check:rust && pnpm check:wasm && pnpm build"
+    "check": "pnpm check:js && pnpm check:rust && pnpm check:wasm && pnpm build && pnpm check:package"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -97,6 +97,9 @@ jobs:
       - name: verify development test surface is excluded
         run: pnpm check:production-testkit
 
+      - name: verify package export and content contract
+        run: pnpm check:package
+
       - name: upload production shell
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -174,3 +177,44 @@ jobs:
             test-results
             playwright-report
           if-no-files-found: ignore
+
+  external-consumer:
+    needs: foundation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble
+
+    steps:
+      - name: check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.19.0
+          run_install: false
+
+      - name: install Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: verify external-consumer toolchain
+        run: |
+          test "$(node --version)" = "v24.18.1"
+          test "$(pnpm --version)" = "11.19.0"
+
+      - name: install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: verify package export and content contract
+        run: pnpm check:package
+
+      - name: run isolated external consumer
+        run: pnpm check:external-consumer

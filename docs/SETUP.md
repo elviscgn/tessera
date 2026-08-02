@@ -70,6 +70,22 @@ The generated Worker module under `src/worker/wasm` is checked in because it is 
 
 Keep `pnpm-lock.yaml` and `rust/Cargo.lock` committed. Clean environments should use `pnpm install --frozen-lockfile` so dependency resolution does not drift.
 
+## Verify the packaged runtime
+
+The runtime is not published to npm for the current release line. The package
+contract is checked by packing the exact build output and installing it in a
+temporary directory outside this repository:
+
+```sh
+pnpm check:package
+pnpm check:external-consumer
+```
+
+The external fixture uses only `@tessera/runtime` and
+`@tessera/runtime/testkit`. Its artifact filename and SHA-256 are recorded in
+`examples/external-consumer/artifact-manifest.json`; update that pin whenever
+the package output changes.
+
 ## Browser release gates
 
 Install the browser revisions selected by Playwright 1.60.0 before running the

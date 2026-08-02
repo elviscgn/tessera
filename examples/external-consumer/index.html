@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tessera external consumer</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        background: #0b1020;
+        color: #e2e8f0;
+      }
+
+      body {
+        margin: 0;
+        min-width: 20rem;
+      }
+
+      main {
+        display: grid;
+        min-height: 100vh;
+        grid-template-rows: auto 1fr;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.8rem 1rem;
+        border-bottom: 1px solid #26344f;
+        background: #101a30;
+      }
+
+      header strong {
+        letter-spacing: 0.04em;
+      }
+
+      output {
+        color: #7dd3fc;
+        font:
+          0.8rem ui-monospace,
+          monospace;
+      }
+
+      #viewport {
+        position: relative;
+        min-height: 28rem;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        min-height: 28rem;
+      }
+
+      #readout {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        display: grid;
+        gap: 0.4rem;
+        padding: 0.8rem;
+        border: 1px solid #26344f;
+        border-radius: 0.7rem;
+        background: rgb(11 16 32 / 88%);
+        font:
+          0.78rem ui-monospace,
+          monospace;
+      }
+
+      #readout span {
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <strong>External consumer fixture</strong>
+        <output id="status" data-testid="runtime-status" data-tessera-status="starting">
+          starting
+        </output>
+      </header>
+      <section id="viewport" aria-label="External Tessera viewport">
+        <canvas id="renderCanvas" aria-label="External Tessera canvas" tabindex="0"></canvas>
+        <div id="readout" aria-live="polite">
+          <div><span>Package:</span> <code id="packageName">@tessera/runtime</code></div>
+          <div><span>Saved bytes:</span> <code id="saveBytes">—</code></div>
+          <div><span>Restored hash:</span> <code id="restoredHash">—</code></div>
+          <div><span>Replay commands:</span> <code id="replayCommands">—</code></div>
+          <div><span>Test bridge:</span> <code id="testBridge">—</code></div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

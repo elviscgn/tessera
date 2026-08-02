@@ -99,6 +99,23 @@ pnpm dev
 
 Open the local URL printed by Vite. The complete toolchain setup is in [docs/SETUP.md](docs/SETUP.md).
 
+## External consumer proof
+
+The repository includes a small consumer that is deliberately kept outside the
+workspace package graph. It installs the exact local runtime tarball through
+the public export map, builds a Vite app, runs the Worker/Wasm simulation, and
+checks the Chromium flow for placement, persistence, replay metadata, and the
+development test bridge.
+
+```sh
+pnpm check:package
+pnpm check:external-consumer
+```
+
+The fixture pins the tarball filename and SHA-256 checksum in
+[`examples/external-consumer/artifact-manifest.json`](examples/external-consumer/artifact-manifest.json).
+Internal runtime paths are intentionally unavailable from the package.
+
 ## Repository map
 
 | Directory                                  | Purpose                                                                       |

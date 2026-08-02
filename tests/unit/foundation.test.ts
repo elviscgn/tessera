@@ -12,7 +12,10 @@ describe('Milestone 0 foundation metadata', () => {
     const packageJson = readRepositoryFile('package.json');
     const rustToolchain = readRepositoryFile('rust-toolchain.toml');
 
+    expect(packageJson).toContain('"name": "@tessera/runtime"');
     expect(packageJson).toContain('"private": true');
+    expect(packageJson).toContain('"./testkit"');
+    expect(packageJson).toContain('"./dist/package/index.js"');
     expect(packageJson).toContain('"type": "module"');
     expect(packageJson).toContain('"packageManager": "pnpm@11.19.0"');
     expect(packageJson).toContain('"node": "24.18.1"');
