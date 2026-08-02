@@ -70,6 +70,15 @@ pub struct EntityArena {
     free_slots: BTreeSet<u32>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct EntitySlotSnapshot {
+    pub(crate) generation: u32,
+    pub(crate) alive: bool,
+    pub(crate) object_type: u32,
+    pub(crate) position: GridPosition,
+    pub(crate) rotation: QuarterTurn,
+}
+
 impl EntityArena {
     /// Creates an empty arena.
     pub const fn new() -> Self {
@@ -185,6 +194,45 @@ impl EntityArena {
                 out.push(0);
             }
         }
+    }
+
+    pub(crate) fn save_slots(&self) -> Vec<EntitySlotSnapshot> {
+        (0..self.generations.len())
+            .map(|index| EntitySlotSnapshot {
+                generation: self.generations[index],
+                alive: self.alive[index],
+                object_type: self.object_types[index],
+                position: self.positions[index],
+                rotation: self.rotations[index],
+            })
+            .collect()
+    }
+
+    pub(crate) fn from_save_slots(slots: &[EntitySlotSnapshot]) -> Result<Self, &'static str> {
+        let mut arena = Self::new();
+        arena.generations.reserve(slots.len());
+        arena.alive.reserve(slots.len());
+        arena.object_types.reserve(slots.len());
+        arena.positions.reserve(slots.len());
+        arena.rotations.reserve(slots.len());
+        for (index, slot) in slots.iter().enumerate() {
+            if slot.generation == 0 {
+                return Err("entity generation must be non-zero");
+            }
+            if slot.alive && slot.object_type == 0 {
+                return Err("live entity object type must be non-zero");
+            }
+            let slot_number = u32::try_from(index).map_err(|_| "entity slot exceeds u32")?;
+            arena.generations.push(slot.generation);
+            arena.alive.push(slot.alive);
+            arena.object_types.push(slot.object_type);
+            arena.positions.push(slot.position);
+            arena.rotations.push(slot.rotation);
+            if !slot.alive {
+                arena.free_slots.insert(slot_number);
+            }
+        }
+        Ok(arena)
     }
 
     fn valid_slot_index(&self, id: EntityId) -> Result<usize, EntityError> {

@@ -7,6 +7,9 @@
  */
 
 export const PROTOCOL_VERSION = 1;
+export const SAVE_GAME_ID = 'tessera';
+export const SAVE_FRAMEWORK_VERSION = '0.0.0';
+export const DEFAULT_SCENARIO_ID = 'default';
 const COMMAND_HEADER_LENGTH = 28;
 const RECORD_HEADER_LENGTH = 8;
 export const RESPONSE_LENGTH = 64;
@@ -19,6 +22,18 @@ const SPAWN_OPCODE = 1;
 const MOVE_OPCODE = 3;
 const REMOVE_OPCODE = 4;
 const PLACEMENT_RESPONSE_LENGTH = 40;
+
+/**
+ * Encodes a command batch with no records. The authoritative kernel accepts
+ * this as an exact-step clock pulse; it cannot mutate gameplay state because
+ * there is no command payload to apply.
+ */
+export const encodeEmptyCommandBatch = (batchSequence = 0n): ArrayBuffer => {
+  const bytes = new Uint8Array(COMMAND_HEADER_LENGTH);
+  const view = new DataView(bytes.buffer);
+  writeCommandHeader(view, bytes, batchSequence, COMMAND_HEADER_LENGTH, 0);
+  return bytes.buffer;
+};
 
 export interface WorkerObjectTypeDefinition {
   readonly id: string;
@@ -121,6 +136,17 @@ export interface MetricsRequest {
   readonly requestId: number;
 }
 
+export interface SaveRequest {
+  readonly type: 'save';
+  readonly requestId: number;
+}
+
+export interface LoadRequest {
+  readonly type: 'load';
+  readonly requestId: number;
+  readonly bytes: ArrayBuffer;
+}
+
 export interface DisposeRequest {
   readonly type: 'dispose';
 }
@@ -133,6 +159,8 @@ export type WorkerRequest =
   | RequestEventsRequest
   | ReturnRenderBufferRequest
   | MetricsRequest
+  | SaveRequest
+  | LoadRequest
   | DisposeRequest;
 
 export interface BoundaryMetrics {
@@ -152,6 +180,10 @@ export interface BoundaryMetrics {
   readonly memoryGeneration: number;
   readonly memoryBufferBytes: number;
   readonly viewRecreations: number;
+  readonly saveCalls: number;
+  readonly saveBytes: number;
+  readonly loadCalls: number;
+  readonly loadBytes: number;
 }
 
 export interface StartupReadyResponse {
@@ -209,6 +241,26 @@ export interface MetricsResponse {
   readonly metrics: BoundaryMetrics;
 }
 
+export interface SaveResultResponse {
+  readonly type: 'save-result';
+  readonly requestId: number;
+  readonly tick: number;
+  readonly stateHashHex: string;
+  readonly byteLength: number;
+  readonly bytes: ArrayBuffer;
+  readonly metrics: BoundaryMetrics;
+}
+
+export interface LoadResultResponse {
+  readonly type: 'load-result';
+  readonly requestId: number;
+  readonly tick: number;
+  readonly stateHashHex: string;
+  readonly worldGeneration: number;
+  readonly nextClientSequence: bigint;
+  readonly metrics: BoundaryMetrics;
+}
+
 export interface WorkerErrorResponse {
   readonly type: 'command-error' | 'fatal-error';
   readonly phase: 'startup' | 'command' | 'fatal';
@@ -225,6 +277,8 @@ export type WorkerResponse =
   | EventBatchResponse
   | RenderSnapshotResponse
   | MetricsResponse
+  | SaveResultResponse
+  | LoadResultResponse
   | WorkerErrorResponse;
 
 export const encodeSpawnCommandBatch = (input: SpawnCommandInput): ArrayBuffer => {
@@ -304,7 +358,7 @@ const createCommandRecord = (
   const totalLength = COMMAND_HEADER_LENGTH + RECORD_HEADER_LENGTH + payloadLength;
   const bytes = new Uint8Array(new ArrayBuffer(totalLength));
   const view = new DataView(bytes.buffer);
-  writeCommandHeader(view, bytes, batchSequence, totalLength);
+  writeCommandHeader(view, bytes, batchSequence, totalLength, 1);
   view.setUint16(COMMAND_HEADER_LENGTH, opcode, true);
   view.setUint32(COMMAND_HEADER_LENGTH + 4, payloadLength, true);
   view.setBigUint64(COMMAND_HEADER_LENGTH + RECORD_HEADER_LENGTH, clientSequence, true);
@@ -316,12 +370,13 @@ const writeCommandHeader = (
   bytes: Uint8Array,
   batchSequence: bigint,
   totalLength: number,
+  recordCount: number,
 ): void => {
   bytes.set(COMMAND_MAGIC, 0);
   view.setUint16(8, PROTOCOL_VERSION, true);
   view.setUint16(10, 0, true);
   view.setBigUint64(12, batchSequence, true);
-  view.setUint32(20, 1, true);
+  view.setUint32(20, recordCount, true);
   view.setUint32(24, totalLength, true);
 };
 
@@ -411,7 +466,10 @@ export const parseWasmError = (error: unknown): WorkerErrorResponse => {
   const phase =
     match[1] === 'startup'
       ? 'startup'
-      : match[1] === 'command' || match[1] === 'placement'
+      : match[1] === 'command' ||
+          match[1] === 'placement' ||
+          match[1] === 'save' ||
+          match[1] === 'load'
         ? 'command'
         : 'fatal';
   return {

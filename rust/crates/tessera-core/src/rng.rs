@@ -39,6 +39,12 @@ impl DeterministicRng {
     pub(crate) const fn draws(&self) -> u64 {
         self.draws
     }
+
+    pub(crate) fn from_state(seed: Seed, draws: u64) -> Self {
+        let mut rng = ChaCha8Rng::from_seed(seed);
+        rng.set_word_pos(u128::from(draws).saturating_mul(2));
+        Self { seed, rng, draws }
+    }
 }
 
 #[cfg(test)]

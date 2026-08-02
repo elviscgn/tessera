@@ -32,4 +32,15 @@ describe('reliable event receiver', () => {
     expect(receiver.accept(batch(1n, 1n, 1)).type).toBe('duplicate');
     expect(receiver.metrics().duplicateBatchCount).toBe(1);
   });
+
+  it('resets the sequence boundary after an authoritative load', () => {
+    const receiver = new ReliableEventReceiver();
+    expect(receiver.accept(batch(1n, 1n, 1)).type).toBe('accepted');
+    receiver.reset();
+    expect(receiver.metrics()).toMatchObject({
+      highestContiguousSequence: 0n,
+      desynced: false,
+    });
+    expect(receiver.accept(batch(1n, 1n, 1)).type).toBe('accepted');
+  });
 });

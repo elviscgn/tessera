@@ -4,6 +4,7 @@ import {
   type FoundationRenderer,
   type FoundationWorker,
 } from '../../src/browser/foundation-runtime';
+import { MemoryPersistenceAdapter } from '../../src/public/index';
 import type { RendererDiagnostics } from '../../src/renderer/babylon-renderer';
 import type {
   BoundaryMetrics,
@@ -28,6 +29,10 @@ const metrics = (): BoundaryMetrics => ({
   memoryGeneration: 1,
   memoryBufferBytes: 65536,
   viewRecreations: 1,
+  saveCalls: 0,
+  saveBytes: 0,
+  loadCalls: 0,
+  loadBytes: 0,
 });
 
 const packedEmptySnapshot = (): ArrayBuffer => {
@@ -269,6 +274,7 @@ describe('foundation runtime lifecycle', () => {
     expect(worker.terminations).toBe(1);
     expect(renderer.disposals).toBe(1);
     expect(runtime.state).toBe('disposed');
+    expect(runtime.renderInspection()).toEqual({ entities: [], occupiedCells: [] });
   });
 
   it('fails closed and disposes both owners on a startup failure', async () => {
@@ -292,6 +298,140 @@ describe('foundation runtime lifecycle', () => {
     expect(worker.terminations).toBe(1);
     expect(renderer.disposals).toBe(1);
     expect(runtime.diagnostics().lastError?.code).toBe('wasm_init');
+  });
+
+  it('saves and loads opaque bytes while preserving failed-load state', async () => {
+    const worker = new FakeWorker();
+    const renderer = new FakeRenderer();
+    const runtime = createFoundationRuntime({
+      canvas: {} as HTMLCanvasElement,
+      workerFactory: () => worker,
+      rendererFactory: () => renderer,
+    });
+    worker.emit({
+      type: 'startup-ready',
+      protocolVersion: 1,
+      adapterVersion: 1,
+      tick: 0,
+      objectTypeHandles: [],
+      metrics: metrics(),
+    });
+    await runtime.ready;
+
+    const savePromise = runtime.save();
+    const saveRequest = latestRequest(worker);
+    expect(saveRequest.type).toBe('save');
+    if (saveRequest.type !== 'save') {
+      throw new Error('expected a save request');
+    }
+    const saveBytes = new Uint8Array([123, 125]).buffer;
+    worker.emit({
+      type: 'save-result',
+      requestId: saveRequest.requestId,
+      tick: 0,
+      stateHashHex: 'ab'.repeat(32),
+      byteLength: saveBytes.byteLength,
+      bytes: saveBytes,
+      metrics: metrics(),
+    });
+    await expect(savePromise).resolves.toEqual(new Uint8Array([123, 125]));
+
+    const loadPromise = runtime.load(new Uint8Array([123, 125]));
+    const loadRequest = latestRequest(worker);
+    expect(loadRequest.type).toBe('load');
+    if (loadRequest.type !== 'load') {
+      throw new Error('expected a load request');
+    }
+    worker.emit({
+      type: 'load-result',
+      requestId: loadRequest.requestId,
+      tick: 4,
+      stateHashHex: 'cd'.repeat(32),
+      worldGeneration: 2,
+      nextClientSequence: 5n,
+      metrics: metrics(),
+    });
+    await expect(loadPromise).resolves.toMatchObject({
+      tick: 4n,
+      worldGeneration: 2,
+      stateHashHex: 'cd'.repeat(32),
+    });
+    expect(runtime.diagnostics()).toMatchObject({ simulationTick: 4n });
+
+    const failedLoad = runtime.load(new Uint8Array([0]));
+    const failedRequest = latestRequest(worker);
+    if (failedRequest.type !== 'load') {
+      throw new Error('expected a failed load request');
+    }
+    worker.emit({
+      type: 'command-error',
+      phase: 'command',
+      code: 'checksum_mismatch',
+      message: 'save checksum is invalid',
+      requestId: failedRequest.requestId,
+      metrics: metrics(),
+    });
+    await expect(failedLoad).rejects.toThrow('checksum_mismatch');
+    expect(runtime.state).toBe('ready');
+    expect(runtime.diagnostics().simulationTick).toBe(4n);
+    runtime.dispose();
+  });
+
+  it('routes save and load through the configured persistence adapter', async () => {
+    const worker = new FakeWorker();
+    const renderer = new FakeRenderer();
+    const persistence = new MemoryPersistenceAdapter();
+    const runtime = createFoundationRuntime({
+      canvas: {} as HTMLCanvasElement,
+      persistenceAdapter: persistence,
+      workerFactory: () => worker,
+      rendererFactory: () => renderer,
+    });
+    worker.emit({
+      type: 'startup-ready',
+      protocolVersion: 1,
+      adapterVersion: 1,
+      tick: 0,
+      objectTypeHandles: [],
+      metrics: metrics(),
+    });
+    await runtime.ready;
+
+    const savePromise = runtime.saveToPersistence();
+    const saveRequest = latestRequest(worker);
+    if (saveRequest.type !== 'save') {
+      throw new Error('expected a save request');
+    }
+    const bytes = new Uint8Array([1, 2, 3]).buffer;
+    worker.emit({
+      type: 'save-result',
+      requestId: saveRequest.requestId,
+      tick: 0,
+      stateHashHex: 'aa'.repeat(32),
+      byteLength: bytes.byteLength,
+      bytes,
+      metrics: metrics(),
+    });
+    await savePromise;
+    await expect(persistence.read()).resolves.toEqual(new Uint8Array([1, 2, 3]));
+
+    const loadPromise = runtime.loadFromPersistence();
+    await Promise.resolve();
+    const loadRequest = latestRequest(worker);
+    if (loadRequest.type !== 'load') {
+      throw new Error('expected a load request');
+    }
+    worker.emit({
+      type: 'load-result',
+      requestId: loadRequest.requestId,
+      tick: 2,
+      stateHashHex: 'bb'.repeat(32),
+      worldGeneration: 2,
+      nextClientSequence: 4n,
+      metrics: metrics(),
+    });
+    await expect(loadPromise).resolves.toMatchObject({ tick: 2n, worldGeneration: 2 });
+    runtime.dispose();
   });
 
   it('registers declarative object types and routes placement queries through Rust', async () => {

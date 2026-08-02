@@ -77,31 +77,31 @@ pub enum ReplayError {
 }
 
 #[derive(Clone)]
-struct ScheduledCommand {
-    scheduled_tick: u64,
-    client_sequence: u64,
-    batch_order: u32,
-    command: Command,
-    pre_rejection: Option<RejectionReason>,
+pub(crate) struct ScheduledCommand {
+    pub(crate) scheduled_tick: u64,
+    pub(crate) client_sequence: u64,
+    pub(crate) batch_order: u32,
+    pub(crate) command: Command,
+    pub(crate) pre_rejection: Option<RejectionReason>,
 }
 
 /// The native deterministic kernel.
 #[derive(Clone)]
 pub struct Simulation {
-    config: SimulationConfig,
-    tick: u64,
-    entities: EntityArena,
-    footprints: BTreeMap<u32, Footprint>,
-    object_type_ids: BTreeMap<u32, String>,
-    last_object_type_id: Option<String>,
-    occupancy: OccupancyGrid,
-    rng: DeterministicRng,
-    pending: Vec<ScheduledCommand>,
-    seen_sequences: BTreeSet<u64>,
-    last_client_sequence: Option<u64>,
-    next_event_sequence: u64,
-    events: Vec<SimulationEvent>,
-    replay_commands: Vec<ReplayCommand>,
+    pub(crate) config: SimulationConfig,
+    pub(crate) tick: u64,
+    pub(crate) entities: EntityArena,
+    pub(crate) footprints: BTreeMap<u32, Footprint>,
+    pub(crate) object_type_ids: BTreeMap<u32, String>,
+    pub(crate) last_object_type_id: Option<String>,
+    pub(crate) occupancy: OccupancyGrid,
+    pub(crate) rng: DeterministicRng,
+    pub(crate) pending: Vec<ScheduledCommand>,
+    pub(crate) seen_sequences: BTreeSet<u64>,
+    pub(crate) last_client_sequence: Option<u64>,
+    pub(crate) next_event_sequence: u64,
+    pub(crate) events: Vec<SimulationEvent>,
+    pub(crate) replay_commands: Vec<ReplayCommand>,
 }
 
 impl Simulation {
@@ -133,6 +133,12 @@ impl Simulation {
     /// Returns the current authoritative tick.
     pub const fn tick(&self) -> u64 {
         self.tick
+    }
+
+    /// Returns the next client sequence that will not be rejected as stale.
+    pub fn next_client_sequence(&self) -> Option<u64> {
+        self.last_client_sequence
+            .map_or(Some(1), |sequence| sequence.checked_add(1))
     }
 
     /// Returns the live entity at a matching generation.
@@ -678,7 +684,7 @@ impl Simulation {
         }
     }
 
-    fn footprint_for(&self, object_type: u32) -> &Footprint {
+    pub(crate) fn footprint_for(&self, object_type: u32) -> &Footprint {
         static DEFAULT_FOOTPRINT: std::sync::OnceLock<Footprint> = std::sync::OnceLock::new();
         self.footprints
             .get(&object_type)

@@ -102,4 +102,19 @@ impl RejectionReason {
     pub const fn code(self) -> u8 {
         self as u8
     }
+
+    /// Converts a persisted rejection code back into its stable enum value.
+    pub const fn from_code(code: u8) -> Option<Self> {
+        match code {
+            1 => Some(Self::ZeroSequence),
+            2 => Some(Self::DuplicateSequence),
+            3 => Some(Self::NonMonotonicSequence),
+            4 => Some(Self::InvalidObjectType),
+            5 => Some(Self::UnknownEntity),
+            6 => Some(Self::GenerationExhausted),
+            7 => Some(Self::OccupiedCell),
+            8 => Some(Self::InvalidFootprint),
+            _ => None,
+        }
+    }
 }

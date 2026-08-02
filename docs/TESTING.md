@@ -35,7 +35,10 @@ The Rust suite covers the rules that must be identical in native and browser run
 - replay across idle ticks and rejected replay order;
 - normalized footprints, rotated cell expansion, atomic occupancy claims, overlap rejection, move/remove release, and entity/occupancy invariants;
 - sorted public object registries, non-mutating placement queries, deterministic rejection reasons, and replay with the same footprint registry;
-- serialization, migration, and persistence fixtures as those systems land.
+- canonical Rust-owned save DTO bytes and BLAKE3 checksums;
+- save/load round trips that preserve meaningful state, replay records, event history, and hashes;
+- golden save fixtures, corrupted/checksum failures, wrong-game and wrong-scenario imports, unsupported schema results, and invalid registry/occupancy references;
+- RNG cursor restoration after a save/load round trip, so future random commands remain identical.
 
 The protocol crate also tests little-endian command/event/render records, lengths, flags, opcodes, region descriptors, and contiguous event sequences.
 
@@ -51,11 +54,28 @@ The Worker checks that:
 - render buffers are copied into owned transferable storage;
 - pool exhaustion drops only visual snapshots;
 - event acknowledgements never skip a sequence;
-- a changed Wasm memory buffer recreates all host views.
+- a changed Wasm memory buffer recreates all host views;
+- save and load requests use defensive transferable ownership, and a failed load does not change the active tick or state hash;
+- a successful load resets event acknowledgement and publishes a new world-generation snapshot.
 
 ## Browser checks
 
 The Scenario Lab is the first browser smoke target. It checks the canvas, Babylon scene, orthographic camera, named pan/zoom/rotation actions, screen-to-grid readout, render loop, Worker readiness, packed snapshot delivery, event acknowledgement, memory-generation diagnostics, entity picking, selected-ID display, screen-space bounds, Rust-backed placement previews, placement/removal controls, and disposal on `pagehide`.
+
+Its nine deterministic laboratories are exposed as labelled panels: camera and coordinates, placement, entity rendering stress, simulation stress, Worker/Wasm boundary metrics, save/load, the visual museum, structured errors, and lifecycle resets. Each panel uses the same public runtime commands and development testkit waits as a consumer-facing integration would use; none keeps an authoritative entity or occupancy cache.
+
+In development builds, browser checks may use
+`@tessera/runtime/testkit` and `window.tesseraTest` for explicit readiness and
+tick waits, entity/snapshot inspection, camera state, picking, diagnostics,
+annotated captures, and reproduction manifests. The bridge is validated and
+command-oriented; it does not expose arbitrary state mutation. A production
+browser test must assert that the global is absent and that the testkit module
+is not retained by the built application.
+
+The production shell gate runs `pnpm check:production-testkit` after the Vite
+build and scans executable JavaScript chunks for the registration and global
+names. Source maps are not executable application code and are excluded from
+that check.
 
 The probe uses structured `data-tessera-*` attributes so browser tests can assert ticks, hashes, sequence numbers, buffer ownership, and render generations without relying on timing or pixels alone. The known native/Wasm probe hash is:
 
@@ -63,9 +83,15 @@ The probe uses structured `data-tessera-*` attributes so browser tests can asser
 1d58e8e0cf937e92279a5206ca3d4e8d24b046b9545568695bc262dd0ed4967c
 ```
 
-The render probe also validates the authoritative occupied-cell region, entity transform regions, and their typed-array decoders. Unit coverage rejects malformed entity layouts, duplicate slots, invalid generations, and stale selection handles. Browser smoke selects the rendered probe entity and checks that its `slot:generation` ID and canvas-relative bounds appear in the lab. Save/load, visual regression, Firefox/WebKit smoke coverage, and the development test bridge are added as their milestones become active.
+The render probe also validates the authoritative occupied-cell region, entity transform regions, and their typed-array decoders. Unit coverage rejects malformed entity layouts, duplicate slots, invalid generations, and stale selection handles. Browser smoke selects the rendered probe entity and checks that its `slot:generation` ID and canvas-relative bounds appear in the lab. Persistence tests exercise the public adapter boundary and the Worker save/load responses. Visual regression, Firefox/WebKit smoke coverage, and full browser flows are the next milestone; the development bridge is already covered by the Scenario Lab and its unit contract tests.
 
 Renderer reconciliation has pure unit coverage for slot updates, missing-entity removals, generation replacement, visual-type regrouping, newer-world resets, and stale snapshot rejection. Renderer diagnostics expose visual-group count, instance count, reset count, stale mapping count, and stale snapshot count so a browser stress run can prove that dropped or late projections do not resurrect presentation state.
+
+Reproduction tests validate manifest versions, command sequence records,
+relative artifact paths, checkpoint hashes, structured errors, and
+environment metadata. A captured directory is safe to copy between machines:
+large screenshots and traces remain separate artifacts, while `manifest.json`
+is enough for a native tool to validate the scenario and replay inputs.
 
 ## Visual tests
 

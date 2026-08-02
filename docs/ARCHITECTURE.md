@@ -85,6 +85,16 @@ Wasm memory growth invalidates existing JavaScript views. The Worker compares th
 
 The initial render pool has three reusable buffers with power-of-two capacities. The main thread returns a buffer after it is no longer in use. If all buffers are in flight, the Worker records backpressure and skips visual publication while simulation continues.
 
+## Persistence and replay
+
+The save boundary is deliberately separate from the per-frame protocol. Rust serializes a versioned, compact UTF-8 JSON DTO containing the seed, registry metadata, arena slots, occupancy index, pending commands, event log, replay records, and the current tick. A checksum is BLAKE3 over the same DTO with its checksum field empty; it is not a hash of Rust memory layout or formatted JSON from another implementation.
+
+The Worker checks framework, protocol, game, and scenario identity before asking Rust to validate a save. Rust validates the schema, seed, registry ordering, generational references, occupancy invariants, command/event sequences, replay ticks, and checksum into temporary state. Only after every check succeeds does the Wasm adapter swap the simulation, advance the world generation, reset event acknowledgement, and publish a fresh event stream and snapshot. A rejected import therefore leaves the active world unchanged.
+
+Schema version 1 is the only supported document today. The migration boundary is intentionally explicit: the loader returns a structured unsupported-version result, and a pure migration step will be added only when a second schema exists. Golden fixtures cover canonical bytes and native replay/hash parity; corruption, wrong identity, unsupported schema, quota, and interrupted-write cases are treated as expected failure paths.
+
+The public `PersistenceAdapter` owns storage, not interpretation. The in-memory, IndexedDB, file-import, and file-export helpers copy bytes defensively. Applications can provide another adapter without exposing browser storage to Rust.
+
 ## Renderer
 
 Babylon imports are modular, with the glTF loader registered separately. The scene is right-handed and follows glTF conventions: `+X` east, `+Y` up, `+Z` south, and one Babylon unit per metre. Asset pivots are bottom-centred. Camera and footprint rotations are four clockwise quarter-turns.
@@ -99,13 +109,22 @@ The public selection path returns an opaque `EntityId` whose canonical represent
 
 The runtime also exposes explicit readiness, simulation-tick, rendered-tick, render-generation, and no-pending-error waits. These waits resolve from observed Worker and renderer state rather than from arbitrary delays, so browser tests and consumer UI can synchronize without taking ownership of the clock.
 
+Development diagnostics follow the same boundary. The optional
+`@tessera/runtime/testkit` entry point registers `window.tesseraTest` only in a
+development build. It can inspect validated snapshots, stable IDs, selection,
+camera state, synchronization metrics, and structured errors; it can submit
+the public command methods and exact-step clock pulse, but it cannot mutate a
+Rust store or access Wasm memory. Annotated overlays are disposable DOM
+presentation, and reproduction bundles are versioned manifest directories
+containing the observed commands, snapshots, hashes, logs, and environment.
+
 The project starts with ordinary Babylon instances because they support per-instance transforms and picking. Selection uses the outline renderer on the selected instance, so the selection path does not mutate a shared group material. Thin instances remain a measured performance experiment, not a default.
 
 The camera is a right-handed orthographic projection aligned with glTF. `+X` is east, `+Y` is up, and `+Z` is south. The presentation camera uses a mathematically symmetric isometric pitch, four clockwise quarter-turns, a target measured in millimetres, and a zoom expressed as visible tile height. Its pure `CameraProjection` model is shared by Babylon synchronization, screen/world/grid conversion, and the coordinate laboratory. Negative world boundaries use floor division, so `-1 mm` belongs to cell `-1` for a `1,000 mm` tile. Camera state remains presentation state and cannot affect Rust hashes or commands.
 
 ## Current implementation
 
-Milestones 3 through 8 provide the lifecycle, camera, occupancy, selection, placement, and scalable-renderer foundation:
+Milestones 3 through 11 provide the lifecycle, camera, occupancy, selection, placement, scalable-renderer, persistence, observability, and Scenario Lab foundation:
 
 - `FoundationRuntime` owns one Worker, one renderer, listeners, pending requests, readiness, diagnostics, selection subscriptions, deterministic waits, and disposal;
 - `BabylonRenderer` creates a WebGL2 engine, right-handed scene, camera, light, the foundation overlays, and slot/generation-keyed entity visuals;
@@ -119,8 +138,18 @@ Milestones 3 through 8 provide the lifecycle, camera, occupancy, selection, plac
 - render snapshots also carry validated transform, visual-type, and flag regions; the browser copies those records before returning the transferable buffer to the Worker.
 - entity snapshots reconcile by slot, generation, and visual type; ordinary instances are grouped under disposable visual templates and removed when absent from the newest snapshot;
 - world-generation resets clear the renderer projection atomically, while stale world/snapshot generations and stale slot mappings are visible in renderer diagnostics.
+- `renderInspection()` retains defensive copies of the latest validated snapshot, entity records, and occupied cells for the development test surface; loading or disposing the runtime clears that inspection state before a new generation is accepted.
+- Scenario Lab is a vanilla DOM consumer of the public runtime and development testkit. Its nine laboratories use fixed seeds, declarative object definitions, exact tick controls, and structured readouts rather than a parallel simulation store.
 
-The public entry point currently exposes lifecycle/readiness primitives, the presentation camera model, stable selection IDs, canvas picking, screen-space bounds, declarative object definitions, Rust-backed placement queries, placement/move/remove commands, and synchronization waits. Persistence, the development test bridge, and the wider consumer-facing scenario API are added in later milestones.
+## Observability
+
+The development bridge, overlay controls, and reproduction-directory contract
+are described in [Observability](OBSERVABILITY.md). They are intentionally
+outside the default runtime entry point. Browser checks can therefore exercise
+the same public command and query path as a consumer without shipping a test
+global or a raw mutation escape hatch.
+
+The public entry point currently exposes lifecycle/readiness primitives, the presentation camera model and action layer, canvas viewport helpers, stable selection IDs, canvas picking, screen-space bounds, declarative object definitions, Rust-backed placement queries and commands, persistence adapters, save/load methods, and synchronization waits. The development test bridge remains an explicit secondary entry point; a wider consumer-facing scenario API is still a later milestone.
 
 ## Placement flow
 

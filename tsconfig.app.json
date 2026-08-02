@@ -8,6 +8,7 @@
     "src/browser/**/*.ts",
     "src/public/**/*.ts",
     "src/renderer/**/*.ts",
+    "src/testkit/**/*.ts",
     "apps/**/*.ts",
     "tests/**/*.ts",
     "vite.config.ts",

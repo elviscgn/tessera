@@ -22,6 +22,7 @@
     "check:wasm": "pnpm build:wasm",
     "dev": "vite",
     "build": "pnpm build:wasm && vite build",
+    "check:production-testkit": "node scripts/check-production-testkit.mjs",
     "quality:fallow": "node scripts/check-fallow-policy.mjs && fallow audit --format compact --fail-on-issues",
     "test": "vitest run",
     "test:watch": "vitest",

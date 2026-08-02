@@ -1,11 +1,14 @@
 import { init, TesseraWasm } from './wasm/tessera_wasm.js';
 import {
   bytesToHex,
+  DEFAULT_SCENARIO_ID,
   decodeCommandResponse,
   decodePlacementValidation,
   MAX_EXACT_TICKS_PER_CALL,
   parseWasmError,
   PROTOCOL_VERSION,
+  SAVE_FRAMEWORK_VERSION,
+  SAVE_GAME_ID,
   type BoundaryMetrics,
   type CommandRequest,
   type InitializeRequest,
@@ -47,6 +50,14 @@ let eventGapCount = 0;
 let eventResyncCount = 0;
 let renderSnapshots = 0;
 let renderBytes = 0;
+let saveCalls = 0;
+let saveBytes = 0;
+let loadCalls = 0;
+let loadBytes = 0;
+let scenarioId = DEFAULT_SCENARIO_ID;
+
+const initializedScenarioId = (request: InitializeRequest): string =>
+  request.scenarioId ?? DEFAULT_SCENARIO_ID;
 
 const post = (message: WorkerResponse, transfer: Transferable[] = []): void => {
   workerScope.postMessage(message, transfer);
@@ -81,6 +92,10 @@ const metrics = (): BoundaryMetrics => {
     memoryGeneration: memoryViews.generation,
     memoryBufferBytes: memoryViews.byteLength,
     viewRecreations: memoryViews.recreations,
+    saveCalls,
+    saveBytes,
+    loadCalls,
+    loadBytes,
   };
 };
 
@@ -214,6 +229,7 @@ const handleInitialize = async (request: InitializeRequest): Promise<void> => {
     syncMemoryViews();
     bufferPool = new TransferableBufferPool(3);
     simulation = new TesseraWasm(new Uint8Array(request.seed));
+    scenarioId = initializedScenarioId(request);
     const objectTypeHandles: Array<{ readonly id: string; readonly handle: number }> = [];
     for (const definition of request.objectTypes) {
       const handle = simulation.register_object_type(
@@ -236,6 +252,99 @@ const handleInitialize = async (request: InitializeRequest): Promise<void> => {
     postError('fatal-error', 'startup', failure.code, failure.message);
   } finally {
     startupInProgress = false;
+  }
+};
+
+const handleSave = (request: Extract<WorkerRequest, { type: 'save' }>): void => {
+  if (!simulation || fatal) {
+    postError(
+      'command-error',
+      'command',
+      fatal ? 'worker_fatal' : 'not_ready',
+      fatal ? 'the Worker is in a fatal state and requires restart' : 'the Worker is not ready',
+      request.requestId,
+    );
+    return;
+  }
+  saveCalls += 1;
+  try {
+    const bytes = simulation.save_state(
+      SAVE_GAME_ID,
+      scenarioId,
+      SAVE_FRAMEWORK_VERSION,
+      PROTOCOL_VERSION,
+    );
+    const transfer = bytes.slice().buffer;
+    saveBytes += transfer.byteLength;
+    post(
+      {
+        type: 'save-result',
+        requestId: request.requestId,
+        tick: toSafeNumber(BigInt(simulation.tick()), 'save tick'),
+        stateHashHex: bytesToHex(new Uint8Array(simulation.state_hash())),
+        byteLength: transfer.byteLength,
+        bytes: transfer,
+        metrics: metrics(),
+      },
+      [transfer],
+    );
+  } catch (error: unknown) {
+    const failure = parseWasmError(error);
+    postError(
+      failure.type,
+      failure.type === 'fatal-error' ? 'fatal' : 'command',
+      failure.code,
+      failure.message,
+      request.requestId,
+    );
+  }
+};
+
+const handleLoad = (request: Extract<WorkerRequest, { type: 'load' }>): void => {
+  if (!simulation || fatal) {
+    postError(
+      'command-error',
+      'command',
+      fatal ? 'worker_fatal' : 'not_ready',
+      fatal ? 'the Worker is in a fatal state and requires restart' : 'the Worker is not ready',
+      request.requestId,
+    );
+    return;
+  }
+  loadCalls += 1;
+  loadBytes += request.bytes.byteLength;
+  try {
+    simulation.load_state(
+      new Uint8Array(request.bytes),
+      SAVE_GAME_ID,
+      scenarioId,
+      SAVE_FRAMEWORK_VERSION,
+      PROTOCOL_VERSION,
+    );
+    // The Wasm adapter resets its event acknowledgement when it installs a
+    // save. Keep the Worker-side cursor aligned so the first post-load batch
+    // starts at sequence one rather than using the previous world's cursor.
+    highestAcknowledgedEvent = 0n;
+    post({
+      type: 'load-result',
+      requestId: request.requestId,
+      tick: toSafeNumber(BigInt(simulation.tick()), 'load tick'),
+      stateHashHex: bytesToHex(new Uint8Array(simulation.state_hash())),
+      worldGeneration: simulation.world_generation(),
+      nextClientSequence: BigInt(simulation.next_client_sequence()),
+      metrics: metrics(),
+    });
+    publishEvents(0n);
+    publishRenderSnapshot();
+  } catch (error: unknown) {
+    const failure = parseWasmError(error);
+    postError(
+      failure.type,
+      failure.type === 'fatal-error' ? 'fatal' : 'command',
+      failure.code,
+      failure.message,
+      request.requestId,
+    );
   }
 };
 
@@ -419,25 +528,26 @@ const handleDispose = (): void => {
   workerScope.close();
 };
 
+const requestHandlers = {
+  initialize: (request: Extract<WorkerRequest, { type: 'initialize' }>) =>
+    void handleInitialize(request),
+  command: (request: Extract<WorkerRequest, { type: 'command' }>) => handleCommand(request),
+  'validate-placement': (request: Extract<WorkerRequest, { type: 'validate-placement' }>) =>
+    handlePlacementValidation(request),
+  'ack-events': (request: Extract<WorkerRequest, { type: 'ack-events' }>) =>
+    handleAckEvents(request),
+  'request-events': (request: Extract<WorkerRequest, { type: 'request-events' }>) =>
+    handleRequestEvents(request),
+  'return-render-buffer': (request: Extract<WorkerRequest, { type: 'return-render-buffer' }>) =>
+    handleReturnRenderBuffer(request),
+  metrics: (request: Extract<WorkerRequest, { type: 'metrics' }>) => handleMetrics(request),
+  save: (request: Extract<WorkerRequest, { type: 'save' }>) => handleSave(request),
+  load: (request: Extract<WorkerRequest, { type: 'load' }>) => handleLoad(request),
+  dispose: () => handleDispose(),
+} as const;
+
 workerScope.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
-  if (request.type === 'initialize') {
-    void handleInitialize(request);
-  } else if (request.type === 'command') {
-    handleCommand(request);
-  } else if (request.type === 'validate-placement') {
-    handlePlacementValidation(request);
-  } else if (request.type === 'ack-events') {
-    handleAckEvents(request);
-  } else if (request.type === 'request-events') {
-    handleRequestEvents(request);
-  } else if (request.type === 'return-render-buffer') {
-    handleReturnRenderBuffer(request);
-  } else if (request.type === 'metrics') {
-    handleMetrics(request);
-  } else if (request.type === 'dispose') {
-    handleDispose();
-  } else {
-    postError('fatal-error', 'fatal', 'unknown_request', 'the Worker received an unknown request');
-  }
+  const handler = requestHandlers[request.type] as (request: WorkerRequest) => void;
+  handler(request);
 });

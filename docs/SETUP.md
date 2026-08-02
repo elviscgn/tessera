@@ -49,6 +49,12 @@ pnpm dev
 
 Open the Scenario Lab at the local URL printed by Vite. The development page runs the Rust/Wasm probe, shows the Babylon foundation scene, and exposes its current diagnostics in the page markup for browser checks.
 
+During development the page also registers `window.tesseraTest`. It is a
+read-only inspection and command facade for explicit tick waits, snapshot
+inspection, camera and selection queries, annotated captures, and reproduction
+manifests. Production builds omit the registration; consumers that need the
+same surface can import `@tessera/runtime/testkit` from a development entry.
+
 ## What `pnpm check` does
 
 The repository gate runs, in order:

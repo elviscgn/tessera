@@ -40,3 +40,16 @@ export interface PlacementValidation {
 export interface PlacementPreview extends PlacementValidation {
   readonly pending: boolean;
 }
+
+/** Opaque save storage supplied by the host application. */
+export interface PersistenceAdapter {
+  read(): Promise<Uint8Array | undefined>;
+  write(bytes: Uint8Array): Promise<void>;
+}
+
+/** Result returned after an authoritative save has been loaded. */
+export interface LoadResult {
+  readonly tick: bigint;
+  readonly stateHashHex: string;
+  readonly worldGeneration: number;
+}

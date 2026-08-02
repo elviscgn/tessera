@@ -41,25 +41,44 @@ flowchart LR
 
 ## Foundation status
 
-| Area                     | What is working today                                                                                       |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| **Deterministic kernel** | Fixed-tick Rust simulation, seeded randomness, generational IDs, replay, and canonical state hashes         |
-| **Worker boundary**      | Versioned command, event, and render messages with packed validation                                        |
-| **Wasm transport**       | `wasm-pack --target web`, transferable render buffers, and recovery after Wasm memory growth                |
-| **Browser shell**        | Babylon.js lifecycle, readiness, diagnostics, orthographic camera, occupancy overlay, picking, and shutdown |
-| **Selection**            | Stable `slot:generation` IDs, canvas picking, screen-space bounds, and stale-generation checks              |
-| **Placement**            | Rust-owned object registries, non-mutating placement queries, preview state, placement, move, and removal   |
-| **Scalable visuals**     | Visual-type groups, ordinary Babylon instances, snapshot removals, reset generations, and stale-map metrics |
+| Area                     | What is working today                                                                                                |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| **Deterministic kernel** | Fixed-tick Rust simulation, seeded randomness, generational IDs, replay, and canonical state hashes                  |
+| **Worker boundary**      | Versioned command, event, and render messages with packed validation                                                 |
+| **Wasm transport**       | `wasm-pack --target web`, transferable render buffers, and recovery after Wasm memory growth                         |
+| **Browser shell**        | Babylon.js lifecycle, readiness, diagnostics, orthographic camera, occupancy overlay, picking, and shutdown          |
+| **Selection**            | Stable `slot:generation` IDs, canvas picking, screen-space bounds, and stale-generation checks                       |
+| **Placement**            | Rust-owned object registries, non-mutating placement queries, preview state, placement, move, and removal            |
+| **Scalable visuals**     | Visual-type groups, ordinary Babylon instances, snapshot removals, reset generations, and stale-map metrics          |
+| **Persistence**          | Rust-owned versioned JSON saves, checksums, identity validation, atomic loads, replay metadata, and browser adapters |
+| **Diagnostics**          | Development-only test bridge, deterministic waits, annotated snapshot captures, and reproduction manifests           |
 
-The authoritative grid, occupancy model, selection path, declarative placement flow, and grouped renderer projection are now in place. Persistence, the wider consumer-facing scenario API, and the full Scenario Lab remain in development.
+The authoritative grid, occupancy model, selection path, declarative placement flow, grouped renderer projection, persistence boundary, and Scenario Lab laboratories are now in place. The wider consumer-facing scenario API and browser regression suite continue to grow around this foundation.
+
+## Saving and loading
+
+Save bytes are produced and validated by Rust. The browser receives them as opaque `Uint8Array` values and chooses where to keep them:
+
+```ts
+import { MemoryPersistenceAdapter } from '@tessera/runtime';
+
+const adapter = new MemoryPersistenceAdapter();
+const bytes = await runtime.save();
+await adapter.write(bytes);
+
+const restored = await runtime.load(bytes);
+console.log(restored.tick, restored.stateHashHex);
+```
+
+`MemoryPersistenceAdapter`, `createIndexedDbPersistenceAdapter`, `importSaveFile`, and `exportSaveFile` are convenience adapters at the public package entry point. A failed load is rejected before the active world is replaced.
 
 ## Running in the browser
 
 <p align="center">
-  <img src="docs/assets/scenario-lab-foundation.jpg" alt="Tessera Scenario Lab showing a Babylon.js render and a successful probe at tick 1" width="900">
+  <img src="docs/assets/scenario-lab-foundation.jpg" alt="Tessera Scenario Lab showing a Babylon.js render and the foundation probe" width="900">
 </p>
 
-<p align="center"><em>The current foundation probe: a Babylon.js scene rendered from the Worker/Wasm runtime, with the Rust-backed command round trip completing at tick 1.</em></p>
+<p align="center"><em>The Scenario Lab is a deterministic workbench for camera, placement, renderer scale, persistence, diagnostics, and lifecycle checks.</em></p>
 
 ## Quick start
 
@@ -92,13 +111,14 @@ Open the local URL printed by Vite. The complete toolchain setup is in [docs/SET
 
 ## Read next
 
-| If you want to...                  | Start here                           |
-| ---------------------------------- | ------------------------------------ |
-| Understand ownership and data flow | [Architecture](docs/ARCHITECTURE.md) |
-| Set up the pinned toolchain        | [Setup](docs/SETUP.md)               |
-| Run or extend verification         | [Testing](docs/TESTING.md)           |
-| Make a change                      | [Contributing](docs/CONTRIBUTING.md) |
-| See what is next                   | [Roadmap](docs/ROADMAP.md)           |
+| If you want to...                  | Start here                             |
+| ---------------------------------- | -------------------------------------- |
+| Understand ownership and data flow | [Architecture](docs/ARCHITECTURE.md)   |
+| Set up the pinned toolchain        | [Setup](docs/SETUP.md)                 |
+| Run or extend verification         | [Testing](docs/TESTING.md)             |
+| Inspect a browser failure          | [Observability](docs/OBSERVABILITY.md) |
+| Make a change                      | [Contributing](docs/CONTRIBUTING.md)   |
+| See what is next                   | [Roadmap](docs/ROADMAP.md)             |
 
 ## Scope
 

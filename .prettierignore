@@ -10,3 +10,5 @@ coverage/
 rust/target/
 .tools/
 src/worker/wasm/
+# Canonical compact save fixture is compared byte-for-byte by Rust tests.
+tests/fixtures/save-v1-foundation.json

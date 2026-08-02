@@ -28,9 +28,17 @@ export class TesseraWasm {
      */
     latest_event_sequence(): bigint;
     /**
+     * Validates a save into temporary state and swaps it atomically on success.
+     */
+    load_state(bytes: Uint8Array, game_id: string, scenario_id: string, framework_version: string, protocol_version: number): void;
+    /**
      * Initializes one simulation from an exactly 32-byte seed.
      */
     constructor(seed: Uint8Array);
+    /**
+     * Returns the next client sequence that will not be rejected as stale.
+     */
+    next_client_sequence(): bigint;
     /**
      * Registers one declarative object type before the first command is run.
      */
@@ -45,6 +53,14 @@ export class TesseraWasm {
      */
     run_command_batch(command_batch: Uint8Array, exact_ticks: number): Uint8Array;
     /**
+     * Serializes the current authoritative state without mutating it.
+     */
+    save_state(game_id: string, scenario_id: string, framework_version: string, protocol_version: number): Uint8Array;
+    /**
+     * Returns the current canonical state hash for a load response.
+     */
+    state_hash(): Uint8Array;
+    /**
      * Returns the current authoritative tick.
      */
     tick(): bigint;
@@ -52,6 +68,10 @@ export class TesseraWasm {
      * Queries authoritative occupancy for a prospective placement without mutation.
      */
     validate_placement(object_type: number, x: number, z: number, elevation_mm: number, rotation: number): Uint8Array;
+    /**
+     * Returns the current reset/world generation.
+     */
+    world_generation(): number;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -64,12 +84,17 @@ export interface InitOutput {
     readonly tesserawasm_dispose: (a: number) => void;
     readonly tesserawasm_event_batch: (a: number, b: bigint, c: number) => [number, number, number, number];
     readonly tesserawasm_latest_event_sequence: (a: number) => bigint;
+    readonly tesserawasm_load_state: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
     readonly tesserawasm_new: (a: number, b: number) => [number, number, number];
+    readonly tesserawasm_next_client_sequence: (a: number) => bigint;
     readonly tesserawasm_register_object_type: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly tesserawasm_render_snapshot_descriptor: (a: number) => [number, number, number, number];
     readonly tesserawasm_run_command_batch: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly tesserawasm_save_state: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
+    readonly tesserawasm_state_hash: (a: number) => [number, number];
     readonly tesserawasm_tick: (a: number) => bigint;
     readonly tesserawasm_validate_placement: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly tesserawasm_world_generation: (a: number) => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;

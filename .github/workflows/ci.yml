@@ -93,3 +93,6 @@ jobs:
 
       - name: build production shell
         run: pnpm build
+
+      - name: verify development test surface is excluded
+        run: pnpm check:production-testkit

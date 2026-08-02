@@ -74,6 +74,12 @@ export class ReliableEventReceiver {
     return this.highestContiguousSequence;
   }
 
+  /** Starts a fresh event sequence after an authoritative world load. */
+  public reset(): void {
+    this.highestContiguousSequence = 0n;
+    this.desynced = false;
+  }
+
   public metrics(): EventStreamMetrics {
     return {
       highestContiguousSequence: this.highestContiguousSequence,
