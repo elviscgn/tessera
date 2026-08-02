@@ -4,7 +4,7 @@ Tessera is being built in small, reviewable increments. The most useful contribu
 
 ## Before you change code
 
-Start at the repository root and check the current milestone in [PLAN.md](../PLAN.md) and [ROADMAP.md](ROADMAP.md). If a change affects the public API, protocol, crate boundaries, or ownership model, record the decision before implementation rather than letting it emerge accidentally in code.
+Start at the repository root and check the current milestone in [ROADMAP.md](ROADMAP.md). If a change affects the public API, protocol, crate boundaries, or ownership model, record the decision before implementation rather than letting it emerge accidentally in code.
 
 Keep the pinned tool versions and both lockfiles intact. Generated Wasm output is a build artifact; regenerate it with the repository script instead of editing it by hand.
 

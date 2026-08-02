@@ -2,23 +2,16 @@
 
 Tessera has one important rule: Rust owns the simulation. The browser hosts the runtime and presents its results, but it never becomes a second game state.
 
-## Runtime at a glance
+## Runtime responsibilities
 
-```text
-consumer or Scenario Lab
-        │ public TypeScript API
-        ▼
-browser main thread ── transferable buffers ── simulation Worker
-        │                                           │
-        │ Babylon.js, input, UI                     │ wasm-bindgen
-        ▼                                           ▼
-presentation state                             Rust simulation
-                                                    │
-                                                    ▼
-                                             native CLI and tests
-```
+| Part              | Responsibility                                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
+| Rust core         | Authoritative simulation state and rules; native tests and CLI workflows                              |
+| Simulation Worker | One Wasm instance, browser clock, command intake, tick driving, render publication, and Worker errors |
+| Browser host      | Canvas, input, public lifecycle, persistence adapters, and derived presentation state                 |
+| Babylon renderer  | Scene and visual resources; a disposable projection of Rust state                                     |
 
-The main thread owns the canvas, renderer, input, public lifecycle, persistence adapters, and presentation state. The Worker owns the Wasm instance, clock, command intake, tick driving, render publication, and Worker errors. Rust owns simulation state and rules.
+The browser main thread communicates with the Worker through versioned transferable buffers. The renderer receives complete snapshots and never writes into Rust memory.
 
 Babylon.js is deliberately disposable. It can be stopped and rebuilt from a complete render snapshot without changing a tick, command result, event sequence, or state hash.
 
@@ -81,4 +74,4 @@ The public entry point currently exposes lifecycle and readiness primitives only
 
 ## Deliberate exclusions
 
-The first release does not include Ustawi gameplay, networking, physics, mobile/touch input, arbitrary executable scenarios, shared-memory transport, WebGPU requirements, or a consumer-owned Rust plugin ABI. Those choices are recorded in the [architecture and delivery plan](../PLAN.md) and revisited only when measured evidence or a real consumer need justifies them.
+The first release does not include Ustawi gameplay, networking, physics, mobile/touch input, arbitrary executable scenarios, shared-memory transport, WebGPU requirements, or a consumer-owned Rust plugin ABI. These boundaries are revisited only when measured evidence or a real consumer need justifies them.

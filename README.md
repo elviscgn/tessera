@@ -1,35 +1,31 @@
 # Tessera
 
-Tessera is a Rust-powered foundation for deterministic, browser-based isometric games. The simulation runs in Rust, the browser owns lifecycle and presentation, and Babylon.js renders a disposable view of the latest state.
+Tessera is a Rust-powered runtime foundation for deterministic, browser-based isometric games. It is being built for Ustawi, a separate industrialisation and city-building game, but the runtime is intended to be useful to other consumers too.
 
-The first consumer is Ustawi, a separate industrialisation and city-building game. Tessera is being built as a reusable runtime rather than as Ustawi’s gameplay code: economy, citizens, production chains, traffic, and other game-specific systems will live in the consumer.
+The central design choice is simple: Rust owns the simulation, while the browser owns the view. A dedicated Worker runs the Rust/Wasm build, and Babylon.js renders the latest state without becoming a second game state.
 
-## Current status
+## Where the project is now
 
-Milestone 3 is complete. The repository currently demonstrates:
+The current implementation has a working native and browser boundary:
 
-- a native Rust simulation and matching Rust/Wasm adapter;
-- a dedicated Worker with a versioned binary command, event, and render boundary;
-- transferable render buffers with memory-growth recovery;
+- fixed-tick Rust simulation with seeded randomness, generational IDs, replay, and canonical hashes;
+- a dedicated Worker with versioned command, event, and render messages;
+- transferable render buffers with Wasm memory-growth recovery;
 - a Babylon.js engine and scene with a disposable placeholder visual;
 - readiness, diagnostics, and deterministic shutdown behaviour.
 
-The next milestone adds the isometric camera and coordinate conversions. Placement, picking, persistence, the public consumer API, and the Scenario Lab are still ahead on the roadmap.
+The next piece is the isometric camera and coordinate conversion. Placement, picking, persistence, the consumer-facing runtime API, and the full Scenario Lab are still in development.
 
-## Design at a glance
+## Runtime responsibilities
 
-```text
-consumer or Scenario Lab
-        │ public TypeScript API
-        ▼
-browser main thread ── transferable buffers ── simulation Worker
-        │                                           │
-        │ Babylon.js, input, UI                     │ Rust/Wasm
-        ▼                                           ▼
-presentation state                             Rust simulation
-```
+| Part              | Owns                                                                               | Does not own                                       |
+| ----------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Rust core         | Ticks, commands, entities, occupancy, randomness, saves, replay, and hashes        | Browser APIs or rendering                          |
+| Simulation Worker | The Wasm instance, clock, message transport, and buffer ownership                  | Gameplay rules or UI state                         |
+| Browser host      | Lifecycle, input translation, persistence adapters, and derived presentation state | Authoritative simulation state                     |
+| Babylon renderer  | Canvas, scene, camera, meshes, materials, and render-loop resources                | Entity existence, occupancy, or gameplay decisions |
 
-Rust is the only source of truth for ticks, commands, entity lifecycle, occupancy, randomness, saves, replays, and state hashes. TypeScript never maintains a second gameplay state. Babylon.js can be discarded and rebuilt from render data without changing the simulation.
+Commands, events, and render snapshots cross the Worker boundary in versioned batches. Render snapshots can be dropped when the renderer is behind; commands and authoritative events cannot.
 
 ## Quick start
 
@@ -43,27 +39,28 @@ pnpm check
 pnpm dev
 ```
 
-Open the Scenario Lab at the URL printed by Vite. The full setup, Rust installation, and version checks are in [docs/SETUP.md](docs/SETUP.md).
+Open the Scenario Lab at the URL printed by Vite. The full setup and toolchain instructions are in [docs/SETUP.md](docs/SETUP.md).
 
 ## Repository layout
 
-- `rust/` — the deterministic simulation, protocol codecs, Wasm adapter, and native CLI;
-- `src/` — the public TypeScript surface, Worker integration, renderer, and browser services;
-- `apps/scenario-lab/` — a small application for exercising the runtime;
-- `tests/` — unit, integration, browser, visual, and fixture tests as they are added;
-- `docs/` — architecture, contribution, testing, and project-maintenance notes.
+| Directory            | Purpose                                                                       |
+| -------------------- | ----------------------------------------------------------------------------- |
+| `rust/`              | Simulation, protocol codecs, Wasm adapter, and native CLI                     |
+| `src/`               | Public TypeScript surface, Worker integration, renderer, and browser services |
+| `apps/scenario-lab/` | Development application for exercising the runtime                            |
+| `tests/`             | Unit, integration, browser, visual, and fixture tests                         |
+| `docs/`              | Architecture, setup, testing, contribution, and roadmap notes                 |
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — the implemented runtime and data flow;
+- [Architecture](docs/ARCHITECTURE.md) — runtime ownership and data flow;
 - [Setup](docs/SETUP.md) — pinned tools and local commands;
 - [Testing](docs/TESTING.md) — test layers and release checks;
-- [Contributing](docs/CONTRIBUTING.md) — how to make and review changes;
-- [Roadmap](docs/ROADMAP.md) — delivered work and the next milestones;
-- [Architecture and delivery plan](PLAN.md) — the detailed design baseline.
+- [Contributing](docs/CONTRIBUTING.md) — development and review workflow;
+- [Roadmap](docs/ROADMAP.md) — delivered work and the next milestones.
 
 ## Scope
 
-Tessera v0.1 is intended to prove a deterministic, reusable isometric runtime and a clean boundary for an external consumer. It is not a networking layer, a physics engine, a mobile controller, a modding system, or a complete game. Those decisions remain deliberately outside the first release.
+Tessera v0.1 is intended to prove a deterministic, reusable isometric runtime and a clean boundary for an external consumer. It is not a networking layer, physics engine, mobile controller, modding system, or complete game. Economy, citizens, production chains, traffic, and other Ustawi-specific systems remain in the consumer.
 
 The project is licensed under the [MIT License](LICENSE).

@@ -1,6 +1,6 @@
 # Roadmap
 
-Tessera is delivered in small checkpoints so each architectural decision can be reviewed while the change is still easy to understand. The detailed scope, evidence, and stop conditions for every checkpoint live in [PLAN.md](../PLAN.md).
+Tessera is delivered in small checkpoints so each release keeps a clear, reviewable story. This page records what is complete, what comes next, and what remains deliberately out of scope.
 
 ## Delivered
 
