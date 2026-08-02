@@ -9,9 +9,11 @@ test('loads the Scenario Lab and can switch panels', async ({ page }, testInfo) 
   if (statusValue === 'fatal') {
     expect(testInfo.project.name).toBe('firefox');
     await expect(status).toHaveAttribute('data-tessera-error-code', 'webgl_unavailable');
-  } else {
-    await expect(status).toContainText('probe-passed');
+    await expect(page.getByRole('button', { name: 'Camera', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Boundary', exact: true })).toBeVisible();
+    return;
   }
+  await expect(status).toContainText('probe-passed');
   await openLab(page, 'Camera');
   await expect(page.locator('#cameraRotation')).toHaveText('r0');
   await openLab(page, 'Boundary');
