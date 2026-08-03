@@ -80,6 +80,7 @@ execFileSync(
 // The `name` and `producers` custom sections embed rustc crate disambiguator
 // hashes derived from the checkout path and the wasm-bindgen CLI build, so
 // they are not reproducible across machines. They carry no runtime data.
+const WASM_HEADER = Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 const generatedWasm = resolve(outputDirectory, 'tessera_wasm_bg.wasm');
 const wasmBytes = readFileSync(generatedWasm);
 const strippedWasm = stripCustomSections(wasmBytes, new Set(['name', 'producers']));
@@ -131,30 +132,40 @@ writeFileSync(
 
 function stripCustomSections(wasm, namesToDrop) {
   const bytes = Buffer.from(wasm);
-  let offset = 8;
-  const kept = [bytes.subarray(0, offset)];
+  const headerLength = WASM_HEADER.length;
+  const kept = [bytes.subarray(0, headerLength)];
+  let offset = headerLength;
   while (offset < bytes.length) {
     const sectionStart = offset;
     const sectionId = bytes[offset++];
-    let size = 0;
-    let shift = 0;
-    let byte;
-    do {
-      byte = bytes[offset++];
-      size |= (byte & 0x7f) << shift;
-      shift += 7;
-    } while (byte & 0x80);
-    const sectionEnd = offset + size;
-    let drop = false;
-    if (sectionId === 0) {
-      const nameSize = bytes[offset];
-      const name = bytes.subarray(offset + 1, offset + 1 + nameSize).toString('utf8');
-      drop = namesToDrop.has(name);
-    }
-    if (!drop) {
+    const lengthEnd = skipVarint(bytes, offset);
+    const sectionEnd = lengthEnd + readSectionSize(bytes, offset, lengthEnd);
+    const isCustom = sectionId === 0 && namesToDrop.has(customSectionName(bytes, lengthEnd));
+    if (!isCustom) {
       kept.push(bytes.subarray(sectionStart, sectionEnd));
     }
     offset = sectionEnd;
   }
   return Buffer.concat(kept);
+}
+
+function readSectionSize(bytes, offset, end) {
+  let size = 0;
+  let shift = 0;
+  while (offset < end) {
+    size += (bytes[offset] & 0x7f) << shift;
+    offset++;
+    shift += 7;
+  }
+  return size;
+}
+
+function skipVarint(bytes, offset) {
+  while (bytes[offset] & 0x80) offset++;
+  return offset + 1;
+}
+
+function customSectionName(bytes, offset) {
+  const nameLength = bytes[offset];
+  return bytes.subarray(offset + 1, offset + 1 + nameLength).toString('utf8');
 }
