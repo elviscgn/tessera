@@ -4,17 +4,17 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const repositoryRoot = resolve(import.meta.dirname, '..');
-const versionFile = resolve(repositoryRoot, '.wasm-pack-version');
+const versionFile = resolve(repositoryRoot, '.wasm-bindgen-version');
 const expectedVersion = readFileSync(versionFile, 'utf8').trim();
-const versionOutput = execFileSync('wasm-pack', ['--version'], {
+const versionOutput = execFileSync('wasm-bindgen', ['--version'], {
   cwd: repositoryRoot,
   encoding: 'utf8',
 });
-const actualVersion = /^wasm-pack\s+(\S+)/u.exec(versionOutput)?.[1];
+const actualVersion = /^wasm-bindgen\s+(\S+)/u.exec(versionOutput)?.[1];
 
 if (actualVersion !== expectedVersion) {
   throw new Error(
-    `wasm-pack ${expectedVersion} is required; found ${actualVersion ?? versionOutput.trim()}`,
+    `wasm-bindgen ${expectedVersion} is required; found ${actualVersion ?? versionOutput.trim()}`,
   );
 }
 
@@ -33,21 +33,26 @@ const remapPrefixes = [
   join(process.env.CARGO_HOME ?? join(homedir(), '.cargo'), 'registry'),
   repositoryRoot,
 ];
+// wasm-pack installs a platform-specific wasm-bindgen CLI build whose own
+// version string is embedded in the artifact, so the pack must drive the
+// pinned crates.io wasm-bindgen binary directly for byte reproducibility.
+const rustFlags = [
+  process.env.RUSTFLAGS,
+  ...remapPrefixes.map(
+    (prefix, index) => `--remap-path-prefix=${prefix}=build-path-${index}`,
+  ),
+]
+  .filter(Boolean)
+  .join(' ');
 execFileSync(
-  'wasm-pack',
+  'cargo',
   [
     'build',
-    'rust/crates/tessera-wasm',
-    '--target',
-    'web',
     '--release',
-    '--out-dir',
-    outputDirectory,
-    '--no-pack',
-    // wasm-opt is present on Ubuntu runners but not macOS; skipping it keeps
-    // the artifact byte-reproducible across platforms without a pinned
-    // binaryen version.
-    '--no-opt',
+    '--target',
+    'wasm32-unknown-unknown',
+    '--manifest-path',
+    'rust/crates/tessera-wasm/Cargo.toml',
   ],
   {
     cwd: repositoryRoot,
@@ -56,24 +61,23 @@ execFileSync(
       ...process.env,
       // Panic locations and debug strings embed absolute source paths.
       // Remapping them makes the wasm byte-identical across machines.
-      RUSTFLAGS: [
-        process.env.RUSTFLAGS,
-        ...remapPrefixes.map(
-          (prefix, index) => `--remap-path-prefix=${prefix}=build-path-${index}`,
-        ),
-      ]
-        .filter(Boolean)
-        .join(' '),
+      RUSTFLAGS: rustFlags,
     },
   },
 );
-
-// wasm-pack uses a package-publishing .gitignore in every output directory;
-// this checked-in generated module is an application build input instead.
-const generatedIgnore = resolve(outputDirectory, '.gitignore');
-if (existsSync(generatedIgnore)) {
-  rmSync(generatedIgnore);
-}
+execFileSync(
+  'wasm-bindgen',
+  [
+    '--target',
+    'web',
+    '--out-dir',
+    outputDirectory,
+    '--out-name',
+    'tessera_wasm',
+    'rust/target/wasm32-unknown-unknown/release/tessera_wasm.wasm',
+  ],
+  { cwd: repositoryRoot, stdio: 'inherit' },
+);
 
 // The Worker imports the web-target initializer by name. Keeping the adapter
 // named avoids carrying an otherwise unused default export through the
