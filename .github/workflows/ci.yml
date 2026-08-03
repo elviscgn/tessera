@@ -39,7 +39,7 @@ jobs:
 
       - name: install Rust toolchain
         run: |
-          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy --component rust-src --target wasm32-unknown-unknown
           rustc --version | grep -E '^rustc 1\.97\.1 '
           cargo --version | grep -E '^cargo 1\.97\.1 '
           rustup target list --installed | grep -Fx wasm32-unknown-unknown

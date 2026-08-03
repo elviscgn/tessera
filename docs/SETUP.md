@@ -23,6 +23,7 @@ rustup toolchain install 1.97.1 \
   --profile minimal \
   --component rustfmt \
   --component clippy \
+  --component rust-src \
   --target wasm32-unknown-unknown
 
 rustup default 1.97.1

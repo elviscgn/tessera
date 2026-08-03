@@ -44,6 +44,10 @@ execFileSync(
     '--out-dir',
     outputDirectory,
     '--no-pack',
+    // wasm-opt is present on Ubuntu runners but not macOS; skipping it keeps
+    // the artifact byte-reproducible across platforms without a pinned
+    // binaryen version.
+    '--no-opt',
   ],
   {
     cwd: repositoryRoot,
