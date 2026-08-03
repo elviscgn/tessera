@@ -77,6 +77,16 @@ execFileSync(
   { cwd: repositoryRoot, stdio: 'inherit' },
 );
 
+// The `name` and `producers` custom sections embed rustc crate disambiguator
+// hashes derived from the checkout path and the wasm-bindgen CLI build, so
+// they are not reproducible across machines. They carry no runtime data.
+const generatedWasm = resolve(outputDirectory, 'tessera_wasm_bg.wasm');
+const wasmBytes = readFileSync(generatedWasm);
+const strippedWasm = stripCustomSections(wasmBytes, new Set(['name', 'producers']));
+if (strippedWasm.length !== wasmBytes.length) {
+  writeFileSync(generatedWasm, strippedWasm);
+}
+
 // The Worker imports the web-target initializer by name. Keeping the adapter
 // named avoids carrying an otherwise unused default export through the
 // application's module graph while preserving the generated implementation.
@@ -118,3 +128,33 @@ writeFileSync(
   generatedTypes,
   generatedTypeSource.replace('export default function __wbg_init (', 'export function init ('),
 );
+
+function stripCustomSections(wasm, namesToDrop) {
+  const bytes = Buffer.from(wasm);
+  let offset = 8;
+  const kept = [bytes.subarray(0, offset)];
+  while (offset < bytes.length) {
+    const sectionStart = offset;
+    const sectionId = bytes[offset++];
+    let size = 0;
+    let shift = 0;
+    let byte;
+    do {
+      byte = bytes[offset++];
+      size |= (byte & 0x7f) << shift;
+      shift += 7;
+    } while (byte & 0x80);
+    const sectionEnd = offset + size;
+    let drop = false;
+    if (sectionId === 0) {
+      const nameSize = bytes[offset];
+      const name = bytes.subarray(offset + 1, offset + 1 + nameSize).toString('utf8');
+      drop = namesToDrop.has(name);
+    }
+    if (!drop) {
+      kept.push(bytes.subarray(sectionStart, sectionEnd));
+    }
+    offset = sectionEnd;
+  }
+  return Buffer.concat(kept);
+}
