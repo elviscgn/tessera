@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 const repositoryRoot = resolve(import.meta.dirname, '..');
 const versionFile = resolve(repositoryRoot, '.wasm-pack-version');
@@ -30,7 +31,23 @@ execFileSync(
     outputDirectory,
     '--no-pack',
   ],
-  { cwd: repositoryRoot, stdio: 'inherit' },
+  {
+    cwd: repositoryRoot,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      // Panic locations and debug strings embed absolute source paths.
+      // Remapping them makes the wasm byte-identical across machines.
+      RUSTFLAGS: [
+        process.env.RUSTFLAGS,
+        `--remap-path-prefix=${process.env.RUSTUP_HOME ?? join(homedir(), '.rustup')}=rustup-home`,
+        `--remap-path-prefix=${process.env.CARGO_HOME ?? join(homedir(), '.cargo')}/registry=cargo-registry`,
+        `--remap-path-prefix=${repositoryRoot}=tessera-workspace`,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    },
+  },
 );
 
 // wasm-pack uses a package-publishing .gitignore in every output directory;
