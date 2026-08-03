@@ -38,9 +38,7 @@ const remapPrefixes = [
 // pinned crates.io wasm-bindgen binary directly for byte reproducibility.
 const rustFlags = [
   process.env.RUSTFLAGS,
-  ...remapPrefixes.map(
-    (prefix, index) => `--remap-path-prefix=${prefix}=build-path-${index}`,
-  ),
+  ...remapPrefixes.map((prefix, index) => `--remap-path-prefix=${prefix}=build-path-${index}`),
 ]
   .filter(Boolean)
   .join(' ');
