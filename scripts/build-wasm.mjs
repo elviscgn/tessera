@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -19,6 +19,20 @@ if (actualVersion !== expectedVersion) {
 }
 
 const outputDirectory = resolve(repositoryRoot, 'src/worker/wasm');
+const rustupHome = process.env.RUSTUP_HOME ?? join(homedir(), '.rustup');
+const toolchainDirectory = readdirSync(join(rustupHome, 'toolchains')).find((entry) =>
+  entry.startsWith('1.97.1-'),
+);
+if (!toolchainDirectory) {
+  throw new Error('could not locate the 1.97.1 toolchain under RUSTUP_HOME/toolchains');
+}
+const remapPrefixes = [
+  // The installed toolchain directory embeds the host triple
+  // (aarch64-apple-darwin locally, x86_64-unknown-linux-gnu in CI).
+  join(rustupHome, 'toolchains', toolchainDirectory),
+  join(process.env.CARGO_HOME ?? join(homedir(), '.cargo'), 'registry'),
+  repositoryRoot,
+];
 execFileSync(
   'wasm-pack',
   [
@@ -40,9 +54,9 @@ execFileSync(
       // Remapping them makes the wasm byte-identical across machines.
       RUSTFLAGS: [
         process.env.RUSTFLAGS,
-        `--remap-path-prefix=${process.env.RUSTUP_HOME ?? join(homedir(), '.rustup')}=rustup-home`,
-        `--remap-path-prefix=${process.env.CARGO_HOME ?? join(homedir(), '.cargo')}/registry=cargo-registry`,
-        `--remap-path-prefix=${repositoryRoot}=tessera-workspace`,
+        ...remapPrefixes.map(
+          (prefix, index) => `--remap-path-prefix=${prefix}=build-path-${index}`,
+        ),
       ]
         .filter(Boolean)
         .join(' '),
