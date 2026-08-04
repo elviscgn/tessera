@@ -103,35 +103,6 @@ jobs:
       - name: verify release gates
         run: pnpm check:release
 
-      - name: diagnose wasm reproducibility
-        if: failure()
-        run: |
-          sha256sum src/worker/wasm/tessera_wasm_bg.wasm
-          strings src/worker/wasm/tessera_wasm_bg.wasm | grep -E 'rustlib|rustc/|cargo-registry|build-path|home/runner|Users/' | sort -u | head -40
-
-      - name: upload ci wasm
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ci-wasm
-          path: src/worker/wasm/tessera_wasm_bg.wasm
-          if-no-files-found: error
-
-      - name: upload ci packed tarball
-        if: failure()
-        run: |
-          mkdir -p /tmp/ci-pack
-          node scripts/pack-runtime.mjs /tmp/ci-pack
-        shell: bash
-
-      - name: upload ci tarball
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ci-tarball
-          path: /tmp/ci-pack/*.tgz
-          if-no-files-found: error
-
       - name: upload production shell
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
