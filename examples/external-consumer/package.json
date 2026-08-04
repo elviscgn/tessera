@@ -1,0 +1,19 @@
+{
+  "name": "tessera-external-consumer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@tessera/runtime": "file:./artifacts/tessera-runtime-0.0.0.tgz"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "typescript": "6.0.3",
+    "vite": "8.1.5"
+  }
+}

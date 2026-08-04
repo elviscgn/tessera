@@ -35,6 +35,7 @@ import {
   MAX_EXACT_TICKS_PER_CALL,
 } from '../worker/bridge-protocol';
 import type {
+  AssetManifest,
   EntityTransformTarget,
   LoadResult,
   ObjectTypeDefinition,
@@ -116,6 +117,7 @@ export interface FoundationRuntimeOptions {
   readonly canvas: HTMLCanvasElement;
   readonly seed?: Uint8Array;
   readonly camera?: CameraProjectionOptions;
+  readonly assetManifest?: AssetManifest;
   readonly workerFactory?: () => FoundationWorker;
   readonly rendererFactory?: (
     canvas: HTMLCanvasElement,

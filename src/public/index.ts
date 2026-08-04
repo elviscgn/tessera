@@ -8,19 +8,24 @@
  */
 export {
   createFoundationRuntime,
+  createFoundationRuntime as createTesseraRuntime,
   FoundationRuntime,
+  FoundationRuntime as TesseraRuntime,
   type FoundationDiagnostics,
   type FoundationError,
   type FoundationReady,
   type FoundationRenderer,
   type FoundationRenderInspection,
   type FoundationRuntimeOptions,
+  type FoundationRuntimeOptions as TesseraRuntimeOptions,
   type FoundationState,
   type FoundationWorker,
 } from '../browser/foundation-runtime';
 
 export {
   type EntityTransformTarget,
+  type AssetManifest,
+  type AssetManifestEntry,
   type LoadResult,
   type ObjectTypeDefinition,
   type PlacementPreview,

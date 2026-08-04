@@ -30,11 +30,11 @@ rustc --version
 rustup target list --installed
 ```
 
-Install the pinned `wasm-pack` in the repository-local tools directory. Fallow 3.10.0 is installed by the frozen JavaScript dependency install; it does not need a separate global installation.
+Install the pinned `wasm-bindgen` CLI in the repository-local tools directory. Fallow 3.10.0 is installed by the frozen JavaScript dependency install; it does not need a separate global installation.
 
 ```sh
-cargo install wasm-pack --version 0.15.0 --locked --root .tools/wasm-pack-0.15.0
-.tools/wasm-pack-0.15.0/bin/wasm-pack --version
+cargo install wasm-bindgen-cli --version 0.2.126 --locked --root .tools/wasm-bindgen-0.2.126
+.tools/wasm-bindgen-0.2.126/bin/wasm-bindgen --version
 ```
 
 ## Run the project
@@ -69,6 +69,22 @@ The repository gate runs, in order:
 The generated Worker module under `src/worker/wasm` is checked in because it is an application input. Rebuild it with `pnpm check:wasm`; if the output changes, inspect the diff before committing.
 
 Keep `pnpm-lock.yaml` and `rust/Cargo.lock` committed. Clean environments should use `pnpm install --frozen-lockfile` so dependency resolution does not drift.
+
+## Verify the packaged runtime
+
+The runtime is not published to npm for the current release line. The package
+contract is checked by packing the exact build output and installing it in a
+temporary directory outside this repository:
+
+```sh
+pnpm check:package
+pnpm check:external-consumer
+```
+
+The external fixture uses only `@tessera/runtime` and
+`@tessera/runtime/testkit`. Its artifact filename and SHA-256 are recorded in
+`examples/external-consumer/artifact-manifest.json`; update that pin whenever
+the package output changes.
 
 ## Browser release gates
 

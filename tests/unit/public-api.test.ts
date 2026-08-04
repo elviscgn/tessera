@@ -6,6 +6,7 @@ import {
   DEFAULT_CAMERA_ZOOM_TILES,
   DEFAULT_TILE_SIZE_MM,
   FoundationRuntime,
+  TesseraRuntime,
   MAX_CAMERA_ZOOM_TILES,
   MIN_CAMERA_ZOOM_TILES,
   SelectionActionLayer,
@@ -14,6 +15,7 @@ import {
   formatEntityId,
   parseEntityId,
   createFoundationRuntime,
+  createTesseraRuntime,
 } from '../../src/public/index';
 import type {
   CameraPointMm,
@@ -31,6 +33,7 @@ import type {
   FoundationRenderer,
   FoundationRenderInspection,
   FoundationRuntimeOptions,
+  TesseraRuntimeOptions,
   FoundationState,
   FoundationWorker,
   GridCoordinate,
@@ -40,6 +43,8 @@ import type {
   PlacementTarget,
   PlacementValidation,
   ScenarioDefinition,
+  AssetManifest,
+  AssetManifestEntry,
   EntityId,
   EntityHandle,
   ScreenBounds,
@@ -68,6 +73,13 @@ describe('public runtime surface', () => {
       canvas: {} as HTMLCanvasElement,
       camera: cameraOptions,
     };
+    const tesseraRuntimeOptions: TesseraRuntimeOptions = runtimeOptions;
+    const runtimeAlias: typeof FoundationRuntime = TesseraRuntime;
+    const assetEntry: AssetManifestEntry = {
+      id: 'foundation-placeholder',
+      url: 'asset://foundation-placeholder',
+    };
+    const assetManifest: AssetManifest = { assets: [assetEntry] };
     const diagnostics: FoundationDiagnostics | undefined = undefined;
     const error: FoundationError | undefined = undefined;
     const ready: FoundationReady | undefined = undefined;
@@ -99,6 +111,7 @@ describe('public runtime surface', () => {
     const preview: PlacementPreview = { ...placement, pending: false };
 
     expect(typeof createFoundationRuntime).toBe('function');
+    expect(createTesseraRuntime).toBe(createFoundationRuntime);
     expect(typeof CameraActionLayer).toBe('function');
     expect(typeof SelectionActionLayer).toBe('function');
     expect(
@@ -119,6 +132,9 @@ describe('public runtime surface', () => {
       bounds,
       grid,
       runtimeOptions,
+      tesseraRuntimeOptions,
+      runtimeAlias,
+      assetManifest,
       diagnostics,
       error,
       ready,
@@ -138,6 +154,6 @@ describe('public runtime surface', () => {
       transformTarget,
       placement,
       preview,
-    ]).toHaveLength(23);
+    ]).toHaveLength(26);
   });
 });

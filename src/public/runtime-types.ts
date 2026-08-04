@@ -12,6 +12,22 @@ export interface ScenarioDefinition {
   readonly id: string;
 }
 
+/**
+ * Consumer-owned visual metadata. Asset loading is intentionally separate from
+ * authoritative simulation definitions; the runtime treats these records as
+ * presentation input and never sends them to Rust as gameplay state.
+ */
+export interface AssetManifest {
+  readonly assets: readonly AssetManifestEntry[];
+}
+
+export interface AssetManifestEntry {
+  /** Stable identifier referenced by visual object metadata. */
+  readonly id: string;
+  /** Consumer-resolved URL for the asset, usually a glTF file. */
+  readonly url: string;
+}
+
 /** An integer placement target expressed in public object-type IDs. */
 export interface PlacementTarget {
   readonly objectType: string;

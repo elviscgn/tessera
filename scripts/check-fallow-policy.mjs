@@ -21,9 +21,43 @@ for (const file of trackedFiles) {
   }
 }
 
-for (const configFile of ['.fallowrc.json', '.fallowrc.jsonc', 'fallow.toml', '.fallow.toml']) {
-  if (existsSync(configFile)) {
-    violations.push(`${configFile}: Fallow configuration requires an explicit policy change`);
+const allowedFallowConfig = '.fallowrc.json';
+const fallowConfigFiles = ['.fallowrc.json', '.fallowrc.jsonc', 'fallow.toml', '.fallow.toml'];
+for (const configFile of fallowConfigFiles) {
+  if (configFile !== allowedFallowConfig && existsSync(configFile)) {
+    violations.push(`${configFile}: only the checked-in JSON Fallow policy is allowed`);
+  }
+}
+if (!existsSync(allowedFallowConfig)) {
+  violations.push(`${allowedFallowConfig}: the checked-in Fallow policy is required`);
+} else {
+  let fallowConfig;
+  try {
+    fallowConfig = JSON.parse(readFileSync(allowedFallowConfig, 'utf8'));
+  } catch (error) {
+    violations.push(`${allowedFallowConfig}: invalid JSON (${String(error)})`);
+  }
+  if (fallowConfig !== undefined) {
+    const allowedKeys = ['$schema', 'ignorePatterns', 'publicPackages'];
+    const unexpectedKeys = Object.keys(fallowConfig).filter((key) => !allowedKeys.includes(key));
+    if (unexpectedKeys.length > 0) {
+      violations.push(
+        `${allowedFallowConfig}: unexpected policy keys: ${unexpectedKeys.join(', ')}`,
+      );
+    }
+    if (
+      JSON.stringify(fallowConfig.ignorePatterns) !==
+      JSON.stringify(['examples/external-consumer/**'])
+    ) {
+      violations.push(
+        `${allowedFallowConfig}: the external consumer must remain the only ignored analysis path`,
+      );
+    }
+    if (JSON.stringify(fallowConfig.publicPackages) !== JSON.stringify(['@tessera/runtime'])) {
+      violations.push(
+        `${allowedFallowConfig}: the runtime package must remain the only public package`,
+      );
+    }
   }
 }
 

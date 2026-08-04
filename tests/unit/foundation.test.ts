@@ -12,7 +12,10 @@ describe('Milestone 0 foundation metadata', () => {
     const packageJson = readRepositoryFile('package.json');
     const rustToolchain = readRepositoryFile('rust-toolchain.toml');
 
+    expect(packageJson).toContain('"name": "@tessera/runtime"');
     expect(packageJson).toContain('"private": true');
+    expect(packageJson).toContain('"./testkit"');
+    expect(packageJson).toContain('"./dist/package/index.js"');
     expect(packageJson).toContain('"type": "module"');
     expect(packageJson).toContain('"packageManager": "pnpm@11.19.0"');
     expect(packageJson).toContain('"node": "24.18.1"');
@@ -27,7 +30,7 @@ describe('Milestone 0 foundation metadata', () => {
     expect(packageJson).toContain('"@playwright/test": "1.60.0"');
     expect(packageJson).not.toMatch(/"(react|react-dom)"\s*:/);
     expect(readRepositoryFile('.node-version').trim()).toBe('24.18.1');
-    expect(readRepositoryFile('.wasm-pack-version').trim()).toBe('0.15.0');
+    expect(readRepositoryFile('.wasm-bindgen-version').trim()).toBe('0.2.126');
     expect(rustToolchain).toContain('channel = "1.97.1"');
     expect(rustToolchain).toContain('wasm32-unknown-unknown');
   });

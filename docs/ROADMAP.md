@@ -19,26 +19,18 @@ Tessera is delivered in small checkpoints so each release keeps a clear, reviewa
 - **Milestone 11 — Scenario Lab:** nine deterministic laboratories for camera, placement, renderer scale, exact ticks, boundary metrics, persistence, visual scenes, structured failures, and lifecycle resets.
 - **Milestone 12 — browser regression:** pinned Playwright flows, canonical Chromium museum visuals, production bridge exclusion smoke, and Firefox/WebKit compatibility smoke.
 - **Milestone 13 — performance and cleanup:** native/browser harnesses, lifecycle checks, recorded baselines, and evidence gates for optimization.
+- **Milestone 14 — external consumer proof:** an outside-workspace consumer installing the packed artifact through the public export map, reproducing version pinning, and rejecting internal imports.
+- **Milestone 15 — first usable release:** validated public documentation, API contracts, package exports, version metadata, protocol compatibility, artifact checksum pinning, known limitations, and the deferred roadmap.
 
 ## Next
 
-**Milestone 14 — external consumer proof** is the next implementation checkpoint. It will validate the packed artifact from outside the workspace.
+The v0.1 release surface is complete. The remaining work is owner-level release activity: running the GitHub release gate on the merged branch, attaching the pinned artifact and checksum to a tag, and preparing the separate Milestone 1 task when the foundation review accepts the evidence. Future consumer-owned Rust gameplay depends on the Ustawi-driven composition decision gate.
 
 ## Planned checkpoints
 
-| Milestone | Focus                                                                                                                |
-| --------- | -------------------------------------------------------------------------------------------------------------------- |
-| 5         | Grid cells, occupancy, footprints, elevation, and rotation invariants                                                |
-| 6         | Picking, stable selection IDs, screen-space bounds, and synchronization waits                                        |
-| 7         | Placement preview, Rust validation, placement/removal commands, and replay                                           |
-| 8         | Entity-to-visual reconciliation, grouping, removal, reset generations, and stale-map diagnostics                     |
-| 9         | Snapshots, replay, save/load, schema checks, migrations, and parity fixtures                                         |
-| 10        | Development diagnostics, annotated overlays, and reproduction bundles                                                |
-| 11        | Scenario Lab and its deterministic camera, placement, stress, persistence, visual, error, and lifecycle laboratories |
-| 12        | Playwright flows, Chromium visual regression, production smoke, and Firefox/WebKit compatibility smoke               |
-| 13        | Native/browser performance harnesses, cleanup checks, baselines, and optimization evidence                           |
-| 14        | Outside-workspace consumer fixture, packed artifact checks, and reproducible version pinning                         |
-| 15        | First usable release validation, documentation, limitations, checksums, and tagged artifacts                         |
+| Milestone | Focus                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------------ |
+| —         | Post-release owner activity: tag the v0.1 artifact, record release evidence, and review the foundation |
 
 ## Beyond v0.1
 
