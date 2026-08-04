@@ -43,7 +43,15 @@ try {
     );
   }
 
-  run('pnpm', ['install', '--offline', '--no-frozen-lockfile'], consumerRoot);
+  const storePath = execFileSync('pnpm', ['store', 'path', '--silent'], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+  }).trim();
+  run(
+    'pnpm',
+    ['install', '--offline', '--no-frozen-lockfile', '--store-dir', storePath],
+    consumerRoot,
+  );
 
   const sourceFiles = [
     join(consumerRoot, 'src/main.ts'),
