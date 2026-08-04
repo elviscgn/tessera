@@ -49,7 +49,7 @@ try {
   }).trim();
   run(
     'pnpm',
-    ['install', '--offline', '--no-frozen-lockfile', '--store-dir', storePath],
+    ['install', '--offline', '--frozen-lockfile', '--store-dir', storePath],
     consumerRoot,
   );
 
