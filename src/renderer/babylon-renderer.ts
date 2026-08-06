@@ -19,7 +19,7 @@ import type {
   RenderGridCell,
   RenderSnapshotMetadata,
 } from '../worker/data-protocol';
-import { CameraProjection, type CameraViewport } from './isometric-camera';
+import { CameraProjection, type CameraViewport, type GridCoordinate } from './isometric-camera';
 import type { PlacementPreview } from '../public/runtime-types';
 import {
   reconcileVisualMappings,
@@ -62,6 +62,46 @@ type EntityVisual = {
 };
 
 type SelectionListener = (entityId: EntityId | undefined) => void;
+
+type GridBounds = Readonly<{
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}>;
+
+const gridBoundsForViewport = (
+  cameraProjection: CameraProjection,
+  viewport: CameraViewport,
+  target: GridCoordinate,
+): GridBounds => {
+  const corners = [
+    { x: 0, y: 0 },
+    { x: viewport.width, y: 0 },
+    { x: 0, y: viewport.height },
+    { x: viewport.width, y: viewport.height },
+  ].map((screen) => cameraProjection.screenToWorld(screen, viewport, 0));
+  const visibleCells = corners.flatMap((point) =>
+    point === undefined ? [] : [cameraProjection.worldToGrid(point)],
+  );
+  if (visibleCells.length !== corners.length) {
+    const fallbackHalfExtent = 8;
+    return {
+      minX: target.x - fallbackHalfExtent,
+      maxX: target.x + fallbackHalfExtent,
+      minZ: target.z - fallbackHalfExtent,
+      maxZ: target.z + fallbackHalfExtent,
+    };
+  }
+  const xs = visibleCells.map((cell) => cell.x);
+  const zs = visibleCells.map((cell) => cell.z);
+  return {
+    minX: Math.min(...xs) - 1,
+    maxX: Math.max(...xs) + 1,
+    minZ: Math.min(...zs) - 1,
+    maxZ: Math.max(...zs) + 1,
+  };
+};
 
 /**
  * Babylon ownership for the foundation milestone.
@@ -435,30 +475,27 @@ export class BabylonRenderer {
     if (this.disposed) {
       return;
     }
+    const viewport = this.viewport();
     const target = this.cameraProjection.worldToGrid(this.cameraProjection.state.targetMm);
-    const halfExtent = 8;
-    const key = `${target.x}:${target.z}:${this.cameraProjection.tileSizeMm}`;
+    const bounds = gridBoundsForViewport(this.cameraProjection, viewport, target);
+    const key = `${bounds.minX}:${bounds.maxX}:${bounds.minZ}:${bounds.maxZ}:${this.cameraProjection.tileSizeMm}`;
     if (this.debugGridKey === key && this.debugGrid !== undefined) {
       return;
     }
     this.debugGridKey = key;
     this.debugGrid?.dispose();
     const tileSize = this.cameraProjection.tileSizeMm / 1000;
-    const minX = target.x - halfExtent;
-    const maxX = target.x + halfExtent;
-    const minZ = target.z - halfExtent;
-    const maxZ = target.z + halfExtent;
     const lines: Vector3[][] = [];
-    for (let x = minX; x <= maxX + 1; x += 1) {
+    for (let x = bounds.minX; x <= bounds.maxX + 1; x += 1) {
       lines.push([
-        new Vector3(x * tileSize, 0.002, minZ * tileSize),
-        new Vector3(x * tileSize, 0.002, (maxZ + 1) * tileSize),
+        new Vector3(x * tileSize, 0.002, bounds.minZ * tileSize),
+        new Vector3(x * tileSize, 0.002, (bounds.maxZ + 1) * tileSize),
       ]);
     }
-    for (let z = minZ; z <= maxZ + 1; z += 1) {
+    for (let z = bounds.minZ; z <= bounds.maxZ + 1; z += 1) {
       lines.push([
-        new Vector3(minX * tileSize, 0.002, z * tileSize),
-        new Vector3((maxX + 1) * tileSize, 0.002, z * tileSize),
+        new Vector3(bounds.minX * tileSize, 0.002, z * tileSize),
+        new Vector3((bounds.maxX + 1) * tileSize, 0.002, z * tileSize),
       ]);
     }
     this.debugGrid = MeshBuilder.CreateLineSystem(
