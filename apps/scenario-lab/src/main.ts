@@ -97,6 +97,7 @@ const canvas = required<HTMLCanvasElement>('#renderCanvas');
 const status = required<HTMLOutputElement>('#status');
 const telemetry = required<HTMLElement>('#telemetry');
 const placementObjectType = required<HTMLSelectElement>('#placementObjectType');
+const placementButton = required<HTMLButtonElement>('[data-placement-action="place"]');
 const overlayEnabled = required<HTMLInputElement>('#overlayEnabled');
 
 for (const definition of OBJECT_TYPES) {
@@ -313,6 +314,7 @@ try {
   let latestPreviewKey = '';
   let selectedObjectType = OBJECT_TYPES[0]?.id ?? 'foundation';
   let placementRotation = 0;
+  let placementMode = false;
   let savedBytes: Uint8Array | undefined;
   let observedLifecycleCycles = 0;
   let disposed = false;
@@ -670,6 +672,17 @@ try {
     });
   };
 
+  const setPlacementMode = (enabled: boolean): void => {
+    placementMode = enabled;
+    placementButton.setAttribute('aria-pressed', String(enabled));
+    placementButton.textContent = enabled ? 'Cancel placement' : 'Place mode';
+    result(
+      '#placementResult',
+      enabled ? 'Placement mode on · click a grid cell to place.' : 'Placement mode cancelled.',
+      'info',
+    );
+  };
+
   const rotatePlacementLeft = (): void => {
     placementRotation = (placementRotation + 3) % 4;
     text('#placementRotation', `r${placementRotation}`);
@@ -682,20 +695,8 @@ try {
     updatePlacementPreview();
   };
 
-  const placeAtPointer = (): void => {
-    if (latestCell === undefined) {
-      result('#placementResult', 'Move over a cell before submitting a placement.', 'danger');
-      return;
-    }
-    const target = targetAt(selectedObjectType, latestCell, placementRotation);
-    runAsync(async () => {
-      await submitPlace(target);
-      result(
-        '#placementResult',
-        `Placed ${target.objectType} at ${target.x},${target.z}, r${target.rotation}.`,
-        'positive',
-      );
-    }, '#placementResult');
+  const togglePlacementMode = (): void => {
+    setPlacementMode(!placementMode);
   };
 
   const removeSelected = (): void => {
@@ -713,7 +714,7 @@ try {
   const placementActions: Readonly<Record<string, () => void>> = {
     'rotate-left': rotatePlacementLeft,
     'rotate-right': rotatePlacementRight,
-    place: placeAtPointer,
+    place: togglePlacementMode,
     remove: removeSelected,
   };
 
@@ -725,7 +726,11 @@ try {
   actionLayer.attach();
   const selectionLayer = new SelectionActionLayer({
     canvas,
-    onPrimaryClick: (point) => runtime.pick(point),
+    onPrimaryClick: (point) => {
+      if (!placementMode) {
+        runtime.pick(point);
+      }
+    },
   });
   selectionLayer.attach();
 
@@ -744,13 +749,26 @@ try {
     disposers.push(() => control.removeEventListener('change', handler));
   };
 
+  const cancelPlacementForLab = (id: LabId): void => {
+    if (!placementMode || id === 'placement') {
+      return;
+    }
+    setPlacementMode(false);
+  };
+
+  const selectLab = (rawId: string | undefined): void => {
+    if (rawId === undefined) {
+      return;
+    }
+    if (!isLabId(rawId)) {
+      return;
+    }
+    cancelPlacementForLab(rawId);
+    setActiveLab(rawId);
+  };
+
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-lab-tab]')) {
-    addClick(button, () => {
-      const id = button.dataset.labTab;
-      if (id !== undefined && isLabId(id)) {
-        setActiveLab(id);
-      }
-    });
+    addClick(button, () => selectLab(button.dataset.labTab));
   }
 
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-camera-action]')) {
@@ -895,10 +913,38 @@ try {
     setPointerCell(undefined);
     updatePlacementPreview();
   };
+  const placementClick = (event: MouseEvent): void => {
+    if (!placementMode || event.button !== 0) {
+      return;
+    }
+    const bounds = canvas.getBoundingClientRect();
+    const cell = runtime.camera.screenToGrid(
+      { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+      viewportForCanvas(canvas),
+      0,
+    );
+    if (cell === undefined) {
+      result('#placementResult', 'Click a valid grid cell to place.', 'danger');
+      return;
+    }
+    setPointerCell(cell);
+    const target = targetAt(selectedObjectType, cell, placementRotation);
+    setPlacementMode(false);
+    runAsync(async () => {
+      await submitPlace(target);
+      result(
+        '#placementResult',
+        `Placed ${target.objectType} at ${target.x},${target.z}, r${target.rotation}.`,
+        'positive',
+      );
+    }, '#placementResult');
+  };
   canvas.addEventListener('pointermove', pointerMove);
   canvas.addEventListener('pointerleave', pointerLeave);
+  canvas.addEventListener('click', placementClick);
   disposers.push(() => canvas.removeEventListener('pointermove', pointerMove));
   disposers.push(() => canvas.removeEventListener('pointerleave', pointerLeave));
+  disposers.push(() => canvas.removeEventListener('click', placementClick));
 
   const unsubscribeDiagnostics = runtime.subscribeDiagnostics((diagnostics) => {
     setDiagnostics(runtime, latestCell);
