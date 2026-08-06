@@ -86,6 +86,12 @@
         background: rgb(127 29 29 / 42%);
       }
 
+      button[aria-pressed='true'] {
+        border-color: rgb(110 231 183 / 72%);
+        background: rgb(6 78 59 / 72%);
+        box-shadow: 0 0 0 0.14rem rgb(110 231 183 / 12%);
+      }
+
       button:disabled {
         cursor: not-allowed;
         opacity: 0.44;
@@ -530,8 +536,8 @@
               <small>02 · Authoritative grid</small>
               <h1>Placement laboratory</h1>
               <p>
-                Preview state is disposable. The Rust-backed query and command decide whether a
-                footprint can claim its cells.
+                Turn on placement mode, then click a grid cell. The Rust-backed query and command
+                decide whether a footprint can claim its cells.
               </p>
             </div>
             <label class="section-label" for="placementObjectType">Object type</label>
@@ -542,7 +548,7 @@
               </div>
               <div class="readout"><span>Rotation</span><code id="placementRotation">r0</code></div>
               <div class="readout">
-                <span>Pointer cell</span><code id="placementPointerCell">—</code>
+                <span>Hover cell</span><code id="placementPointerCell">—</code>
               </div>
               <div class="readout">
                 <span>Validation</span><code id="placementStatus">move over a cell</code>
@@ -553,15 +559,20 @@
               <button type="button" data-placement-action="rotate-right">Rotate right</button>
             </div>
             <div class="control-row">
-              <button type="button" data-placement-action="place" data-tone="positive">
-                Place at pointer
+              <button
+                type="button"
+                data-placement-action="place"
+                data-tone="positive"
+                aria-pressed="false"
+              >
+                Place mode
               </button>
               <button type="button" data-placement-action="remove" data-tone="danger">
                 Remove selected
               </button>
             </div>
             <p id="placementResult" class="result" data-testid="placement-result">
-              Move over a cell to ask Rust for a placement result.
+              Choose Place mode, then click a cell to place.
             </p>
           </section>
 
