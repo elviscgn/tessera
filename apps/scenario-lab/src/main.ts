@@ -749,16 +749,26 @@ try {
     disposers.push(() => control.removeEventListener('change', handler));
   };
 
+  const cancelPlacementForLab = (id: LabId): void => {
+    if (!placementMode || id === 'placement') {
+      return;
+    }
+    setPlacementMode(false);
+  };
+
+  const selectLab = (rawId: string | undefined): void => {
+    if (rawId === undefined) {
+      return;
+    }
+    if (!isLabId(rawId)) {
+      return;
+    }
+    cancelPlacementForLab(rawId);
+    setActiveLab(rawId);
+  };
+
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-lab-tab]')) {
-    addClick(button, () => {
-      const id = button.dataset.labTab;
-      if (id !== undefined && isLabId(id)) {
-        if (id !== 'placement' && placementMode) {
-          setPlacementMode(false);
-        }
-        setActiveLab(id);
-      }
-    });
+    addClick(button, () => selectLab(button.dataset.labTab));
   }
 
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-camera-action]')) {
