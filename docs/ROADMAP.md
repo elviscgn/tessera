@@ -24,7 +24,7 @@ Tessera is delivered in small checkpoints so each release keeps a clear, reviewa
 
 ## Next
 
-The v0.1 release surface is complete. The remaining work is owner-level release activity: running the GitHub release gate on the merged branch, attaching the pinned artifact and checksum to a tag, and preparing the separate Milestone 1 task when the foundation review accepts the evidence. Future consumer-owned Rust gameplay depends on the Ustawi-driven composition decision gate.
+The v0.1 release surface is complete. The remaining work is owner-level release activity: choose and review the release version, push its matching tag, and inspect the attached artifact and checksum. The tag workflow repeats the release gate and creates the GitHub release; it does not publish to npm. Future consumer-owned Rust gameplay depends on the Ustawi-driven composition decision gate.
 
 ## Planned checkpoints
 

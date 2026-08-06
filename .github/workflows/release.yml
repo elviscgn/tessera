@@ -1,0 +1,115 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble
+
+    steps:
+      - name: check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.19.0
+          run_install: false
+
+      - name: install Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: verify JavaScript toolchain and tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$(node --version)" = "v24.18.1"
+          test "$(pnpm --version)" = "11.19.0"
+          test "$RELEASE_TAG" = "v$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+
+      - name: install Rust toolchain
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustc --version | grep -E '^rustc 1\.97\.1 '
+          cargo --version | grep -E '^cargo 1\.97\.1 '
+          rustup target list --installed | grep -Fx wasm32-unknown-unknown
+
+      - name: cache Cargo data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            rust/target
+          key: ${{ runner.os }}-rust-1.97.1-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: install wasm-bindgen
+        run: |
+          cargo install wasm-bindgen-cli --version 0.2.126 --locked --root "${RUNNER_TEMP}/tessera-tools"
+          echo "${RUNNER_TEMP}/tessera-tools/bin" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/tessera-tools/bin/wasm-bindgen" --version | grep -E '^wasm-bindgen 0\.2\.126$'
+
+      - name: install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: run the release gate
+        run: pnpm check
+
+      - name: run the external consumer proof
+        run: pnpm check:external-consumer
+
+      - name: run browser release suites
+        run: |
+          pnpm test:e2e
+          pnpm test:visual
+          pnpm test:e2e:production
+          pnpm test:e2e:compat
+
+      - name: pack the release artifact
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          artifact_dir="${RUNNER_TEMP}/tessera-release"
+          artifact_version="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+          artifact_path="${artifact_dir}/tessera-runtime-${artifact_version}.tgz"
+          pnpm pack:runtime "$artifact_dir"
+          test -f "$artifact_path"
+          node scripts/create-release-manifest.mjs "$artifact_path" "$RELEASE_TAG" "$GITHUB_SHA"
+
+      - name: publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          artifact_dir="${RUNNER_TEMP}/tessera-release"
+          artifact_version="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+          artifact_path="${artifact_dir}/tessera-runtime-${artifact_version}.tgz"
+          gh release create "$RELEASE_TAG" \
+            "$artifact_path" \
+            "${artifact_path}.sha256" \
+            "${artifact_dir}/release-manifest.json" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "Tessera $RELEASE_TAG" \
+            --generate-notes
