@@ -36,10 +36,17 @@ test('drives camera, footprint preview, selection, and placement controls', asyn
   await expect(placementMode).toHaveAttribute('aria-pressed', 'true');
   await expect(placementMode).toHaveText('Cancel placement');
   await page.mouse.click(bounds.x + 96, bounds.y + 180);
-  await expect(placementMode).toHaveAttribute('aria-pressed', 'false');
+  await expect(placementMode).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-testid="placement-result"]')).toContainText(
     'Placed warehouse at',
   );
+  await page.mouse.click(bounds.x + 96, bounds.y + 250);
+  await expect(placementMode).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-testid="placement-result"]')).toContainText(
+    'Placed warehouse at',
+  );
+  await placementMode.click();
+  await expect(placementMode).toHaveAttribute('aria-pressed', 'false');
 
   await openLab(page, 'Camera');
   await labPanel(page, 'camera').getByRole('button', { name: 'Rotate right', exact: true }).click();
