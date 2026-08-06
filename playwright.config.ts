@@ -4,6 +4,7 @@ const production = process.env.TESSERA_E2E_MODE === 'production';
 const configuredBaseUrl = process.env.TESSERA_BASE_URL;
 const port = production ? 4174 : 5173;
 const baseURL = configuredBaseUrl ?? `http://127.0.0.1:${port}`;
+const snapshotPlatform = process.platform === 'darwin' ? 'darwin' : 'linux';
 
 const fixedBrowserOptions = {
   viewport: { width: 1280, height: 720 },
@@ -18,7 +19,7 @@ export default defineConfig({
   testMatch: /.*\.spec\.ts/u,
   outputDir: 'test-results/playwright',
   snapshotDir: 'tests/visual',
-  snapshotPathTemplate: '{snapshotDir}/{testFilePath}-snapshots/{arg}{ext}',
+  snapshotPathTemplate: `{snapshotDir}/{testFilePath}-snapshots/${snapshotPlatform}/{arg}{ext}`,
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
