@@ -36,6 +36,7 @@ const consumerPackage = readJson('examples/external-consumer/package.json');
 const bridgeProtocol = readSource('src/worker/bridge-protocol.ts');
 const dataProtocol = readSource('src/worker/data-protocol.ts');
 const rustProtocol = readSource('rust/crates/tessera-protocol/src/lib.rs');
+const releaseWorkflow = readSource('.github/workflows/release.yml');
 
 const frameworkVersion = packageJson.version;
 if (typeof frameworkVersion !== 'string' || frameworkVersion.length === 0) {
@@ -99,6 +100,18 @@ const requiredDocs = [
 for (const doc of requiredDocs) {
   if (!existsSync(resolve(repositoryRoot, doc))) {
     fail(`required documentation ${doc} is missing`);
+  }
+}
+
+for (const releaseControl of [
+  "- 'v*.*.*'",
+  'pnpm check',
+  'pnpm check:external-consumer',
+  'scripts/create-release-manifest.mjs',
+  'gh release create',
+]) {
+  if (!releaseWorkflow.includes(releaseControl)) {
+    fail(`release workflow is missing the required control: ${releaseControl}`);
   }
 }
 

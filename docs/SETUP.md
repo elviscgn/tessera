@@ -63,8 +63,9 @@ The repository gate runs, in order:
 - ESLint and strict TypeScript checks;
 - Vitest;
 - Rust Clippy and the complete Rust test suite;
-- the pinned `wasm-pack --target web` build;
-- the Vite production build.
+- the pinned `wasm-bindgen --target web` Wasm build;
+- the Vite production build;
+- the package export/content contract and release artifact validation.
 
 The generated Worker module under `src/worker/wasm` is checked in because it is an application input. Rebuild it with `pnpm check:wasm`; if the output changes, inspect the diff before committing.
 
@@ -103,3 +104,20 @@ pnpm test:e2e:compat
 The complete Chromium flow and visual museum are the primary release checks.
 Production smoke verifies that the development test bridge is absent, while
 Firefox and WebKit run the documented compatibility smoke.
+
+## Create a release
+
+The release workflow runs only for a semantic version tag whose name matches
+`package.json`, for example `v0.1.0`. It repeats the native, Wasm, package, and
+external-consumer gates, then creates a GitHub release containing the
+deterministic tarball, its SHA-256 file, and a small release manifest. Do not
+create the tag until the merged `main` branch has passed the normal CI gates.
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow does not publish to npm. A package version or protocol
+change must be reviewed as a separate change and must update the committed
+artifact manifest before a tag is pushed.

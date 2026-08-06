@@ -1,12 +1,17 @@
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const repositoryRoot = resolve(import.meta.dirname, '..');
 const versionFile = resolve(repositoryRoot, '.wasm-bindgen-version');
 const expectedVersion = readFileSync(versionFile, 'utf8').trim();
-const versionOutput = execFileSync('wasm-bindgen', ['--version'], {
+const localWasmBindgen = resolve(
+  repositoryRoot,
+  `.tools/wasm-bindgen-${expectedVersion}/bin/wasm-bindgen`,
+);
+const wasmBindgenCommand = existsSync(localWasmBindgen) ? localWasmBindgen : 'wasm-bindgen';
+const versionOutput = execFileSync(wasmBindgenCommand, ['--version'], {
   cwd: repositoryRoot,
   encoding: 'utf8',
 });
@@ -33,9 +38,8 @@ const remapPrefixes = [
   join(process.env.CARGO_HOME ?? join(homedir(), '.cargo'), 'registry'),
   repositoryRoot,
 ];
-// wasm-pack installs a platform-specific wasm-bindgen CLI build whose own
-// version string is embedded in the artifact, so the pack must drive the
-// pinned crates.io wasm-bindgen binary directly for byte reproducibility.
+// The pinned crates.io wasm-bindgen CLI's version is embedded in the artifact,
+// so the build must drive that binary directly for byte reproducibility.
 const rustFlags = [
   process.env.RUSTFLAGS,
   ...remapPrefixes.map((prefix, index) => `--remap-path-prefix=${prefix}=build-path-${index}`),
@@ -64,7 +68,7 @@ execFileSync(
   },
 );
 execFileSync(
-  'wasm-bindgen',
+  wasmBindgenCommand,
   [
     '--target',
     'web',
