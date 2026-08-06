@@ -178,7 +178,7 @@ export class BabylonRenderer {
     this.engine = engine;
     this.scene = new Scene(this.engine);
     this.scene.useRightHandedSystem = true;
-    this.scene.clearColor = new Color4(0.035, 0.047, 0.07, 1);
+    this.scene.clearColor = new Color4(0.055, 0.045, 0.035, 1);
 
     this.cameraProjection = cameraProjection ?? new CameraProjection();
     this.camera = new FreeCamera('tessera-foundation-camera', new Vector3(0, 3, -6), this.scene);
@@ -194,19 +194,19 @@ export class BabylonRenderer {
     this.light.intensity = 0.9;
 
     this.entityMaterial = new StandardMaterial('tessera-foundation-entity-material', this.scene);
-    this.entityMaterial.diffuseColor = new Color3(0.22, 0.62, 0.92);
-    this.selectionOutlineColor = new Color3(1, 0.68, 0.2);
+    this.entityMaterial.diffuseColor = new Color3(0.72, 0.39, 0.18);
+    this.selectionOutlineColor = new Color3(1, 0.73, 0.36);
 
     this.debugGridMaterial = new StandardMaterial('tessera-foundation-grid-material', this.scene);
-    this.debugGridMaterial.emissiveColor = new Color3(0.12, 0.2, 0.3);
+    this.debugGridMaterial.emissiveColor = new Color3(0.28, 0.2, 0.13);
     this.debugGridMaterial.alpha = 0.55;
     this.debugGridMaterial.disableLighting = true;
     this.occupiedMaterial = new StandardMaterial(
       'tessera-foundation-occupied-material',
       this.scene,
     );
-    this.occupiedMaterial.diffuseColor = new Color3(0.95, 0.45, 0.2);
-    this.occupiedMaterial.emissiveColor = new Color3(0.25, 0.08, 0.02);
+    this.occupiedMaterial.diffuseColor = new Color3(0.84, 0.52, 0.22);
+    this.occupiedMaterial.emissiveColor = new Color3(0.32, 0.14, 0.03);
     this.occupiedMaterial.alpha = 0.32;
     this.occupiedMaterial.disableLighting = true;
 
@@ -214,15 +214,15 @@ export class BabylonRenderer {
       'tessera-placement-valid-material',
       this.scene,
     );
-    this.placementValidMaterial.diffuseColor = new Color3(0.3, 0.9, 0.5);
-    this.placementValidMaterial.emissiveColor = new Color3(0.06, 0.3, 0.12);
+    this.placementValidMaterial.diffuseColor = new Color3(0.55, 0.75, 0.36);
+    this.placementValidMaterial.emissiveColor = new Color3(0.14, 0.26, 0.08);
     this.placementValidMaterial.alpha = 0.42;
     this.placementValidMaterial.disableLighting = true;
     this.placementInvalidMaterial = new StandardMaterial(
       'tessera-placement-invalid-material',
       this.scene,
     );
-    this.placementInvalidMaterial.diffuseColor = new Color3(0.95, 0.3, 0.25);
+    this.placementInvalidMaterial.diffuseColor = new Color3(0.84, 0.3, 0.22);
     this.placementInvalidMaterial.emissiveColor = new Color3(0.3, 0.05, 0.03);
     this.placementInvalidMaterial.alpha = 0.42;
     this.placementInvalidMaterial.disableLighting = true;
@@ -504,6 +504,7 @@ export class BabylonRenderer {
       this.scene,
     );
     this.debugGrid.color = this.debugGridMaterial.emissiveColor;
+    this.debugGrid.alpha = 0.46;
     this.debugGrid.isPickable = false;
   };
 
