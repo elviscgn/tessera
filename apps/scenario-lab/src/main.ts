@@ -929,12 +929,11 @@ try {
     }
     setPointerCell(cell);
     const target = targetAt(selectedObjectType, cell, placementRotation);
-    setPlacementMode(false);
     runAsync(async () => {
       await submitPlace(target);
       result(
         '#placementResult',
-        `Placed ${target.objectType} at ${target.x},${target.z}, r${target.rotation}.`,
+        `Placed ${target.objectType} at ${target.x},${target.z}, r${target.rotation}. Click another cell or cancel placement.`,
         'positive',
       );
     }, '#placementResult');
