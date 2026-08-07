@@ -54,7 +54,7 @@
     "test:e2e:production": "TESSERA_E2E_MODE=production playwright test tests/e2e/production.spec.ts --project=chromium",
     "test:e2e:compat": "playwright test tests/e2e/compatibility.spec.ts --project=firefox --project=webkit",
     "test:visual": "playwright test tests/visual --project=chromium",
-    "test:visual:update": "playwright test tests/visual --project=chromium --update-snapshots",
+    "test:visual:update": "playwright test tests/visual --project=chromium --update-snapshots=all",
     "perf:native": "node scripts/run-native-performance.mjs",
     "perf:native:check": "node scripts/run-native-performance.mjs --compare tests/fixtures/performance/native-baseline.json",
     "perf:browser": "node scripts/run-browser-performance.mjs",

@@ -178,7 +178,7 @@ export class BabylonRenderer {
     this.engine = engine;
     this.scene = new Scene(this.engine);
     this.scene.useRightHandedSystem = true;
-    this.scene.clearColor = new Color4(0.055, 0.045, 0.035, 1);
+    this.scene.clearColor = new Color4(0.03, 0.035, 0.04, 1);
 
     this.cameraProjection = cameraProjection ?? new CameraProjection();
     this.camera = new FreeCamera('tessera-foundation-camera', new Vector3(0, 3, -6), this.scene);
@@ -194,20 +194,20 @@ export class BabylonRenderer {
     this.light.intensity = 0.9;
 
     this.entityMaterial = new StandardMaterial('tessera-foundation-entity-material', this.scene);
-    this.entityMaterial.diffuseColor = new Color3(0.72, 0.39, 0.18);
-    this.selectionOutlineColor = new Color3(1, 0.73, 0.36);
+    this.entityMaterial.diffuseColor = new Color3(0.76, 0.78, 0.82);
+    this.selectionOutlineColor = new Color3(1, 1, 1);
 
     this.debugGridMaterial = new StandardMaterial('tessera-foundation-grid-material', this.scene);
-    this.debugGridMaterial.emissiveColor = new Color3(0.28, 0.2, 0.13);
+    this.debugGridMaterial.emissiveColor = new Color3(0.2, 0.22, 0.26);
     this.debugGridMaterial.alpha = 0.55;
     this.debugGridMaterial.disableLighting = true;
     this.occupiedMaterial = new StandardMaterial(
       'tessera-foundation-occupied-material',
       this.scene,
     );
-    this.occupiedMaterial.diffuseColor = new Color3(0.84, 0.52, 0.22);
-    this.occupiedMaterial.emissiveColor = new Color3(0.32, 0.14, 0.03);
-    this.occupiedMaterial.alpha = 0.32;
+    this.occupiedMaterial.diffuseColor = new Color3(0.72, 0.75, 0.79);
+    this.occupiedMaterial.emissiveColor = new Color3(0.16, 0.18, 0.22);
+    this.occupiedMaterial.alpha = 0.24;
     this.occupiedMaterial.disableLighting = true;
 
     this.placementValidMaterial = new StandardMaterial(
