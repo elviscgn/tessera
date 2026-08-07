@@ -156,7 +156,7 @@ packages:
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
   '@tessera/runtime@file:artifacts/tessera-runtime-0.0.0.tgz':
-    resolution: {integrity: sha512-VQurjgxWpj3iXCtNaLnNgl9ViGOqHTkHfvZqzVaff6s/x079lglPEL4jZpoM+WvT3ifMHLCiY0w60r1vgButyg==, tarball: file:artifacts/tessera-runtime-0.0.0.tgz}
+    resolution: {integrity: sha512-1b4Ruf5SwPg4A0IhbFyqXqtRjZ16c5e1sVeXmnqKVTn2ln4uQ4/zhMtcK2pqemo44dUEMlDsYwhI4xjPcRhsbQ==, tarball: file:artifacts/tessera-runtime-0.0.0.tgz}
     version: 0.0.0
     engines: {node: 24.18.1, pnpm: 11.19.0}
 
