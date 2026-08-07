@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0f0d0a" />
+    <meta name="theme-color" content="#090a0c" />
     <title>Tessera · Scenario Lab</title>
     <style>
       :root {
@@ -14,18 +14,18 @@
         --font-display: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
         --font-mono: 'SFMono-Regular', 'Cascadia Code', 'Roboto Mono', ui-monospace, monospace;
         font-family: var(--font-sans);
-        --ink: #f4ede2;
-        --muted: #b9ac9b;
-        --quiet: #86796b;
-        --line: rgb(238 221 196 / 15%);
-        --line-strong: rgb(238 221 196 / 28%);
-        --panel: rgb(25 21 17 / 91%);
-        --panel-soft: rgb(35 29 23 / 78%);
-        --accent: #e3a15a;
-        --accent-strong: #f2c27b;
-        --mint: #aec38c;
-        --amber: #e8b85b;
-        --rose: #d98278;
+        --ink: #f3f4f5;
+        --muted: #b5b8be;
+        --quiet: #7d828a;
+        --line: rgb(255 255 255 / 14%);
+        --line-strong: rgb(255 255 255 / 28%);
+        --panel: rgb(18 20 23 / 92%);
+        --panel-soft: rgb(30 32 36 / 80%);
+        --accent: #f4f5f6;
+        --accent-strong: #ffffff;
+        --mint: #b5d39c;
+        --amber: #d8c58c;
+        --rose: #e49a9a;
       }
 
       * {
@@ -42,7 +42,7 @@
 
       body {
         overflow: hidden;
-        background: #0f0d0a;
+        background: #090a0c;
         color: var(--ink);
       }
 
@@ -55,7 +55,7 @@
       button {
         border: 1px solid var(--line-strong);
         border-radius: 0.48rem;
-        background: linear-gradient(145deg, rgb(59 48 38 / 72%), rgb(35 29 23 / 72%));
+        background: linear-gradient(145deg, rgb(48 51 56 / 80%), rgb(27 29 32 / 78%));
         color: var(--ink);
         cursor: pointer;
         font-family: var(--font-sans);
@@ -69,8 +69,8 @@
       button:hover,
       button:focus-visible {
         border-color: var(--accent);
-        background: linear-gradient(145deg, rgb(83 63 43 / 86%), rgb(49 38 28 / 86%));
-        box-shadow: 0 0 0 0.16rem rgb(227 161 90 / 11%);
+        background: linear-gradient(145deg, rgb(84 88 95 / 88%), rgb(49 52 58 / 88%));
+        box-shadow: 0 0 0 0.16rem rgb(255 255 255 / 12%);
         outline: none;
       }
 
@@ -79,19 +79,19 @@
       }
 
       button[data-tone='positive'] {
-        border-color: rgb(174 195 140 / 48%);
-        background: rgb(74 92 55 / 38%);
+        border-color: rgb(181 211 156 / 52%);
+        background: rgb(79 107 59 / 38%);
       }
 
       button[data-tone='danger'] {
-        border-color: rgb(217 130 120 / 48%);
-        background: rgb(109 49 43 / 42%);
+        border-color: rgb(228 154 154 / 52%);
+        background: rgb(113 53 53 / 42%);
       }
 
       button[aria-pressed='true'] {
-        border-color: rgb(227 161 90 / 78%);
-        background: rgb(116 74 35 / 62%);
-        box-shadow: 0 0 0 0.14rem rgb(227 161 90 / 14%);
+        border-color: rgb(255 255 255 / 80%);
+        background: rgb(255 255 255 / 14%);
+        box-shadow: 0 0 0 0.14rem rgb(255 255 255 / 12%);
       }
 
       button:disabled {
@@ -104,9 +104,9 @@
         overflow: hidden;
         isolation: isolate;
         background:
-          radial-gradient(circle at 14% 12%, rgb(177 104 52 / 14%), transparent 34rem),
-          radial-gradient(circle at 86% 78%, rgb(104 84 55 / 11%), transparent 30rem),
-          linear-gradient(135deg, #0d0c09 0%, #17130f 100%);
+          radial-gradient(circle at 14% 12%, rgb(255 255 255 / 5%), transparent 34rem),
+          radial-gradient(circle at 86% 78%, rgb(255 255 255 / 3%), transparent 30rem),
+          linear-gradient(135deg, #08090b 0%, #15171a 100%);
       }
 
       #renderCanvas {
@@ -143,7 +143,7 @@
         justify-content: space-between;
         gap: 1rem;
         padding: 1.15rem 1.4rem 0.85rem;
-        background: linear-gradient(180deg, rgb(14 12 9 / 90%), transparent);
+        background: linear-gradient(180deg, rgb(8 9 11 / 92%), transparent);
       }
 
       .brand {
@@ -158,11 +158,11 @@
         width: 2.35rem;
         height: 2.35rem;
         place-items: center;
-        border: 1px solid rgb(242 194 123 / 72%);
+        border: 1px solid rgb(255 255 255 / 72%);
         border-radius: 0.75rem 0.75rem 0.25rem 0.75rem;
         background: var(--accent);
-        box-shadow: 0.24rem 0.24rem 0 rgb(116 74 35 / 58%);
-        color: #26180e;
+        box-shadow: 0.24rem 0.24rem 0 rgb(255 255 255 / 22%);
+        color: #08090b;
         font-family: var(--font-display);
         font-size: 1.1rem;
         font-weight: 800;
@@ -180,7 +180,7 @@
       }
 
       .brand-copy span {
-        color: var(--accent);
+        color: var(--muted);
         font-size: 0.7rem;
         letter-spacing: 0.18em;
         text-transform: uppercase;
@@ -194,7 +194,7 @@
         padding: 0.45rem 0.75rem;
         border: 1px solid var(--line);
         border-radius: 999px;
-        background: rgb(18 15 12 / 72%);
+        background: rgb(15 17 20 / 74%);
         color: var(--muted);
         font: 0.7rem var(--font-mono);
         letter-spacing: 0.015em;
@@ -205,19 +205,19 @@
         height: 0.42rem;
         border-radius: 50%;
         background: var(--amber);
-        box-shadow: 0 0 0 0.18rem rgb(251 191 36 / 12%);
+        box-shadow: 0 0 0 0.18rem rgb(216 197 140 / 14%);
         content: '';
       }
 
       #status[data-tessera-status='ready']::before,
       #status[data-tessera-status='probe-passed']::before {
         background: var(--mint);
-        box-shadow: 0 0 0 0.18rem rgb(174 195 140 / 14%);
+        box-shadow: 0 0 0 0.18rem rgb(181 211 156 / 14%);
       }
 
       #status[data-tessera-status='fatal']::before {
         background: var(--rose);
-        box-shadow: 0 0 0 0.18rem rgb(217 130 120 / 14%);
+        box-shadow: 0 0 0 0.18rem rgb(228 154 154 / 14%);
       }
 
       .lab-nav {
@@ -225,7 +225,7 @@
         gap: 0.45rem;
         overflow-x: auto;
         padding: 0 1.4rem 0.95rem;
-        border-bottom: 1px solid rgb(238 221 196 / 10%);
+        border-bottom: 1px solid rgb(255 255 255 / 10%);
         scrollbar-width: thin;
       }
 
@@ -234,7 +234,7 @@
         padding: 0.5rem 0.78rem;
         border-color: transparent;
         border-radius: 999px;
-        background: rgb(29 24 19 / 52%);
+        background: rgb(25 27 30 / 52%);
         color: var(--muted);
         font-size: 0.72rem;
         white-space: nowrap;
@@ -242,12 +242,12 @@
 
       .lab-nav button:hover,
       .lab-nav button:focus-visible {
-        background: rgb(63 48 34 / 62%);
+        background: rgb(62 66 72 / 66%);
       }
 
       .lab-nav button[aria-selected='true'] {
-        border-color: rgb(227 161 90 / 65%);
-        background: rgb(116 74 35 / 38%);
+        border-color: rgb(255 255 255 / 72%);
+        background: rgb(255 255 255 / 12%);
         box-shadow: inset 0 -2px var(--accent);
         color: var(--ink);
       }
@@ -261,12 +261,12 @@
         overflow: auto;
         border: 1px solid var(--line-strong);
         border-radius: 1.2rem 0.5rem 1.2rem 0.5rem;
-        background: linear-gradient(145deg, rgb(32 26 21 / 93%), rgb(17 15 12 / 92%));
+        background: linear-gradient(145deg, rgb(31 33 37 / 94%), rgb(14 16 19 / 94%));
         box-shadow:
           0 2rem 5rem rgb(0 0 0 / 40%),
-          inset 0 1px rgb(255 244 225 / 5%);
-        backdrop-filter: blur(1.25rem) saturate(115%);
-        scrollbar-color: rgb(227 161 90 / 32%) transparent;
+          inset 0 1px rgb(255 255 255 / 5%);
+        backdrop-filter: blur(1.25rem) saturate(105%);
+        scrollbar-color: rgb(255 255 255 / 32%) transparent;
       }
 
       .control-surface::before {
@@ -275,7 +275,7 @@
         right: 1.2rem;
         left: 1.2rem;
         height: 2px;
-        background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        background: linear-gradient(90deg, transparent, rgb(255 255 255 / 82%), transparent);
         content: '';
         opacity: 0.72;
         pointer-events: none;
@@ -332,8 +332,8 @@
         padding: 0.62rem 0.7rem;
         border: 1px solid var(--line);
         border-radius: 0.55rem;
-        background: rgb(39 31 24 / 56%);
-        box-shadow: inset 0 1px rgb(255 244 225 / 4%);
+        background: rgb(255 255 255 / 5%);
+        box-shadow: inset 0 1px rgb(255 255 255 / 5%);
       }
 
       .readout span {
@@ -384,14 +384,14 @@
         width: 100%;
         border: 1px solid var(--line-strong);
         border-radius: 0.48rem;
-        background: rgb(31 26 21 / 88%);
+        background: rgb(26 28 31 / 90%);
         color: var(--ink);
       }
 
       select:focus-visible,
       input:focus-visible {
         border-color: var(--accent);
-        box-shadow: 0 0 0 0.16rem rgb(227 161 90 / 11%);
+        box-shadow: 0 0 0 0.16rem rgb(255 255 255 / 12%);
         outline: none;
       }
 
@@ -457,7 +457,7 @@
         gap: 1rem;
         margin-top: auto;
         padding: 0.75rem 1.4rem;
-        background: linear-gradient(0deg, rgb(14 12 9 / 94%), transparent);
+        background: linear-gradient(0deg, rgb(8 9 11 / 96%), transparent);
         color: var(--quiet);
         font-size: 0.68rem;
       }
