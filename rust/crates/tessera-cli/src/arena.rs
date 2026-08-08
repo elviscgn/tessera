@@ -76,7 +76,7 @@ pub fn run_match(options: &ArenaPlayOptions) -> Result<ArenaMatchReport, Box<dyn
     let mut goals = Vec::new();
     let mut turn = 0u32;
     while turn < options.max_turns && !arena.is_complete() {
-        let side = if turn % 2 == 0 { 0 } else { 1 };
+        let side = if turn.is_multiple_of(2) { 0 } else { 1 };
         let direction = if side == 0 {
             Vec2::from_micro(-1, 0)
         } else {
