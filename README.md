@@ -151,7 +151,7 @@ fixture outside the workspace.
 | Work on the repository             | [Contributing](docs/CONTRIBUTING.md)   |
 | See the delivered roadmap          | [Roadmap](docs/ROADMAP.md)             |
 
-## v0.1 boundaries
+## What v0.1 deliberately does not include
 
 The first release focuses on a deterministic, single-player runtime and its
 browser contract. Networking, a physics engine, mobile/touch controls, a
