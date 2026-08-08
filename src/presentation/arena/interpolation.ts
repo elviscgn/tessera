@@ -104,27 +104,26 @@ export class ArenaInterpolator {
 
   /** Poses for the rendering time window ending at `tick`. */
   public sample(tick: bigint, alpha: number): readonly InterpolatedPose[] {
+    const last = this.snapshots.at(-1);
+    if (!last) {
+      return [];
+    }
     const index = this.indexAt(tick);
     if (index < 0) {
-      return interpolateSnapshotPair(
-        this.snapshots.at(-1) ?? this.snapshots[0],
-        this.snapshots.at(-1) ?? this.snapshots[0],
-        1,
-      );
+      return interpolateSnapshotPair(last, last, 1);
     }
-    if (index >= this.snapshots.length - 1) {
-      return interpolateSnapshotPair(
-        this.snapshots.at(-2) ?? this.snapshots[index],
-        this.snapshots.at(-1) ?? this.snapshots[index],
-        1,
-      );
+    const previous = this.snapshots[index];
+    if (!previous) {
+      return interpolateSnapshotPair(last, last, 1);
     }
-    return interpolateSnapshotPair(this.snapshots[index], this.snapshots[index + 1], alpha);
+    const next = this.snapshots[index + 1] ?? last;
+    return interpolateSnapshotPair(previous, next, alpha);
   }
 
   private indexAt(tick: bigint): number {
     for (let index = this.snapshots.length - 1; index >= 0; index -= 1) {
-      if (this.snapshots[index].tick <= tick) {
+      const candidate = this.snapshots[index];
+      if (candidate && candidate.tick <= tick) {
         return index;
       }
     }

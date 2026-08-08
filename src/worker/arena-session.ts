@@ -114,8 +114,8 @@ export class ArenaSession {
   /** Drains and presents the event log. */
   public drainPresentationEvents(): ArenaPresentationEvent[] {
     const records = JSON.parse(this.core.drain_events()) as ArenaEventRecord[];
-    const score = this.core.score();
-    return presentArenaEvents(records, [score[0], score[1]], this.core.is_complete());
+    const [side0 = 0, side1 = 0] = this.core.score();
+    return presentArenaEvents(records, [side0, side1], this.core.is_complete());
   }
 
   /** Stable machine-readable identity for the current session. */
