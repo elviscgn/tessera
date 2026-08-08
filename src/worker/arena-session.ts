@@ -2,7 +2,7 @@
 // engine core. The session owns command sequencing, stepping, and the
 // event->presentation mapping; the core stays a dumb deterministic machine.
 
-import { encodeArenaBatch, type ArenaCommand } from './arena-encoding';
+import type { ArenaCommand } from './arena-command';
 import {
   presentArenaEvents,
   type ArenaEventRecord,
@@ -13,7 +13,7 @@ import type { ArenaSnapshot } from '../presentation/arena/interpolation';
 /** The deterministic core the session drives (implemented by ArenaWasm). */
 /** The real engine core the session is an observer of (implemented by ArenaWasm). */
 export interface ArenaSessionCore {
-  submit_command_batch(bytes: Uint8Array): void;
+  submit_commands_json(json: string): void;
   advance_one_tick(): void;
   advance_ticks(count: bigint): void;
   state_hash_hex(): string;
@@ -64,9 +64,9 @@ export class ArenaSession {
     this.options = options;
   }
 
-  /** Encodes and submits a batch of arena commands. */
+  /** Submits a batch of semantic arena commands to the authoritative core. */
   public apply(commands: readonly ArenaCommand[]): void {
-    this.core.submit_command_batch(encodeArenaBatch(commands));
+    this.core.submit_commands_json(JSON.stringify(commands));
     this.appliedCommands += commands.length;
   }
 

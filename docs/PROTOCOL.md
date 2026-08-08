@@ -195,7 +195,7 @@ The v0.1 protocol remains valid for grid-first consumers. A continuous-arena con
 
 ### Arena command wire encoding (implemented)
 
-The engine-track binary command encoding `encode_arena_command`/`decode_arena_command` in `rust/crates/tessera-arena` is mirrored byte-for-byte by `src/worker/arena-encoding.ts`. Each command starts with a discriminant byte; fixed-point fields are little-endian signed 64-bit raw values (micrometres scaled by 1024) followed by fixed-size payloads:
+The engine-track binary command encoding `encode_arena_command`/`decode_arena_command` in `rust/crates/tessera-arena` is the only encoding: the Wasm adapter parses semantic JSON records (`submit_commands_json`) into the same `ArenaCommand` values and never mirrors the wire format in the host. Each command starts with a discriminant byte; fixed-point fields are little-endian signed 64-bit raw values (micrometres scaled by 1024) followed by fixed-size payloads:
 
 | Discriminant | Command   | Payload                                                          |
 | ------------ | --------- | ---------------------------------------------------------------- |
