@@ -141,6 +141,17 @@ export class ArenaWasm {
         return readU8Result(ret);
     }
     /**
+     * Submits a JSON array of semantic arena commands for the next tick.
+     * @param {string} json
+     * @returns {Uint8Array}
+     */
+    submit_commands_json(json) {
+        const ptr0 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.arenawasm_submit_commands_json(this.__wbg_ptr, ptr0, len0);
+        return readU8Result(ret);
+    }
+    /**
      * The current tick.
      * @returns {bigint}
      */

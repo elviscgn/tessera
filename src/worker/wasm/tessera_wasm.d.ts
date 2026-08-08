@@ -60,6 +60,10 @@ export class ArenaWasm {
      */
     submit_command_batch(bytes: Uint8Array): Uint8Array;
     /**
+     * Submits a JSON array of semantic arena commands for the next tick.
+     */
+    submit_commands_json(json: string): Uint8Array;
+    /**
      * The current tick.
      */
     tick(): bigint;
@@ -160,6 +164,7 @@ export interface InitOutput {
     readonly arenawasm_state_hash_hex: (a: number) => [number, number];
     readonly arenawasm_state_snapshot: (a: number) => [number, number];
     readonly arenawasm_submit_command_batch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly arenawasm_submit_commands_json: (a: number, b: number, c: number) => [number, number, number, number];
     readonly arenawasm_tick: (a: number) => bigint;
     readonly arenawasm_validate_placement: (a: number, b: bigint, c: bigint, d: bigint) => number;
     readonly __wbg_tesserawasm_free: (a: number, b: number) => void;
