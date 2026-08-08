@@ -2,7 +2,7 @@
 
 # Tessera
 
-**A deterministic Rust/Wasm runtime for browser-based isometric worlds.**
+**A deterministic Rust/Wasm game runtime for browser-based worlds and arenas.**
 
 Rules live in Rust. The browser stays responsive. Babylon.js is free to rebuild
 the view whenever it needs to.
@@ -33,6 +33,14 @@ it does not own occupancy, entity lifetimes, randomness, or gameplay state.
 The first intended consumer is Ustawi, a separate industrialisation and
 city-building game. Consumer-specific economy, citizens, production chains, and
 traffic belong in Ustawi rather than in the framework.
+
+The next engine track broadens the same foundation to continuous tabletop
+arenas: semantic turn commands, fixed-point motion, narrow deterministic
+collisions, goals, replay, and an authoritative-session boundary. A small
+Bobble League-like local match is the validation target. Its teams, formations,
+scoring, and power plays stay in the consumer; Tessera supplies the runtime and
+the guarantees around it. Those capabilities are deliberately staged after
+the v0.1 grid foundation and are not implied by the current Scenario Lab.
 
 ## The shape of the system
 

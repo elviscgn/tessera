@@ -42,6 +42,15 @@ The Rust suite covers the rules that must be identical in native and browser run
 
 The protocol crate also tests little-endian command/event/render records, lengths, flags, opcodes, region descriptors, and contiguous event sequences.
 
+The engine-track arena suite adds fixed-point property tests, checked-arithmetic
+and overflow fixtures, swept-circle and boundary vectors, stable contact-order
+cases, simultaneous goal/timeout precedence, bounded substep resolution,
+formation and phase invariants, semantic command replays, and native/Wasm
+checkpoint hashes for complete matches. A high-precision reference calculation
+may be used to review vectors, but it is never the authority. Pointer samples,
+animation frames, and Babylon collision results are not accepted as simulation
+fixtures.
+
 ## Wasm and Worker boundary
 
 The Wasm adapter uses the same command batch as the native probe and compares checkpoint hashes. TypeScript tests cover command encoding, response decoding, structured errors, packed render/event validation, buffer ownership, and memory-view recreation after `WebAssembly.Memory.grow()`.
@@ -86,6 +95,12 @@ The probe uses structured `data-tessera-*` attributes so browser tests can asser
 The render probe also validates the authoritative occupied-cell region, entity transform regions, and their typed-array decoders. Unit coverage rejects malformed entity layouts, duplicate slots, invalid generations, and stale selection handles. Browser smoke selects the rendered probe entity and checks that its `slot:generation` ID and canvas-relative bounds appear in the lab. Persistence tests exercise the public adapter boundary and the Worker save/load responses. The Playwright flow, canonical Chromium visual, production, Firefox, and WebKit gates are the M12 browser release checks; the development bridge remains covered by the Scenario Lab and its unit contract tests.
 
 Renderer reconciliation has pure unit coverage for slot updates, missing-entity removals, generation replacement, visual-type regrouping, newer-world resets, and stale snapshot rejection. Renderer diagnostics expose visual-group count, instance count, reset count, stale mapping count, and stale snapshot count so a browser stress run can prove that dropped or late projections do not resurrect presentation state.
+
+When the arena track is enabled, browser coverage also exercises drag-to-aim
+capture/release, formation selection, score and phase readouts, interpolation
+reset, instant replay, and backpressure during motion. The same flows must pass
+with the renderer rebuilt from a snapshot, and presentation-only changes must
+leave the Rust hash unchanged.
 
 Reproduction tests validate manifest versions, command sequence records,
 relative artifact paths, checkpoint hashes, structured errors, and

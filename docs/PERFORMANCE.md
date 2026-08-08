@@ -56,6 +56,8 @@ WebGPU remain deferred until that evidence exists.
 
 - Native command scheduling, fixed-tick throughput, canonical hashing, save
   encoding, and load validation.
+- Continuous arena bodies, deterministic substeps, collision contact counts,
+  turn-resolution latency, and replay seek once the engine track begins.
 - Browser entity population, exact tick batches, save/load, transferable
   render metrics, snapshot drops, memory-view generations, and render-buffer
   pool pressure.
@@ -69,6 +71,17 @@ WebGPU remain deferred until that evidence exists.
 The browser harness uses only the explicit development testkit surface. It
 does not mutate simulation state directly and is never bundled into a
 production runtime.
+
+## Arena-track measurements
+
+The arena reference workload records body and collider counts, fixed-point
+substeps per tick, contacts tested and resolved, maximum turn duration,
+command-to-resolution latency, event bytes, replay seek time, and the share of
+visual frames interpolated or dropped. A physics optimization is accepted only
+when it preserves checkpoint hashes, collision ordering, replay outcomes,
+native/Wasm parity, and cleanup behaviour. The first workload is deliberately
+small and narrow; arbitrary mesh collision, prediction, rollback, and hosted
+multiplayer are separate decisions rather than hidden performance targets.
 
 ## CI cadence
 

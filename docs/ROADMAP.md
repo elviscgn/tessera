@@ -28,12 +28,22 @@ The v0.1 release surface is complete. The remaining work is owner-level release 
 
 ## Planned checkpoints
 
-| Milestone | Focus                                                                                                  |
-| --------- | ------------------------------------------------------------------------------------------------------ |
-| —         | Post-release owner activity: tag the v0.1 artifact, record release evidence, and review the foundation |
+| Milestone | Focus                                                                                                            |
+| --------- | ---------------------------------------------------------------------------------------------------------------- |
+| —         | Post-release owner activity: tag the v0.1 artifact, record release evidence, and review the foundation           |
+| 16        | Audit the engine capabilities required by a continuous tabletop arena and lock the fixed-point/protocol contract |
+| 17        | Add deterministic arena geometry and continuous transform state                                                  |
+| 18        | Add dynamic bodies, match phases, turns, and semantic arena commands                                             |
+| 19        | Add narrow deterministic collision, goals, friction, bounce, and bounded resolution                              |
+| 20        | Prove a local Bobble League-like vertical slice with formation, aim, scoring, power plays, and replay            |
+| 21        | Add arena camera, interpolation, animation, event-driven presentation, and content workflows                     |
+| 22        | Prove an authoritative native session and network-ready command/event semantics                                  |
+| 23        | Prove outside-workspace Rust composition and the engine-track release boundary                                   |
 
 ## Beyond v0.1
 
-Ustawi-specific gameplay remains a separate decision. Once Ustawi has a real Rust gameplay system, Tessera can evaluate a statically composed consumer crate and its versioning boundary. Tessera will not introduce a general plugin ABI, dynamic Wasm plugins, or a universal gameplay trait before that evidence exists.
+The next engine arc is intentionally broader than the current placement laboratory. It uses a Bobble League-like tabletop arena as a validation consumer: players arrange pieces, aim and release a shot, resolve deterministic motion and collisions, score, and replay the result. The arena rules remain consumer-owned; Tessera provides the authoritative runtime, protocol, renderer projection, persistence, and tooling.
 
-Networking, mobile/touch input, modding, shared-memory transport, internal Rust parallelism, WebGPU requirements, and a full editor are also outside the first release.
+Ustawi-specific gameplay remains a separate decision. Once Ustawi has a real Rust gameplay system, Tessera can evaluate a statically composed consumer crate and its versioning boundary. The same rule applies to the arena: no general plugin ABI, dynamic Wasm plugins, or universal gameplay trait is introduced until a local vertical slice and an outside-workspace consumer prove the smallest useful seam.
+
+Physics, networking, mobile/touch input, modding, shared-memory transport, internal Rust parallelism, WebGPU requirements, and a full editor remain outside v0.1. Physics and networking are now planned engine-track work, not promises for the first release; each has a hard parity, replay, performance, and lifecycle gate before it becomes part of a public contract.
