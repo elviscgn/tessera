@@ -13,7 +13,7 @@ test('loads the Scenario Lab and can switch panels', async ({ page }, testInfo) 
     await expect(page.getByRole('button', { name: 'Boundary', exact: true })).toBeVisible();
     return;
   }
-  await expect(status).toContainText('probe-passed');
+  await expect(status).toHaveText(/^tick \d+$/u);
   await openLab(page, 'Camera');
   await expect(page.locator('#cameraRotation')).toHaveText('r0');
   await openLab(page, 'Boundary');

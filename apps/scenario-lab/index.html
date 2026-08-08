@@ -189,7 +189,6 @@
       #status {
         display: inline-flex;
         align-items: center;
-        gap: 0.45rem;
         min-height: 2.1rem;
         padding: 0.45rem 0.75rem;
         border: 1px solid var(--line);
@@ -198,26 +197,6 @@
         color: var(--muted);
         font: 0.7rem var(--font-mono);
         letter-spacing: 0.015em;
-      }
-
-      #status::before {
-        width: 0.42rem;
-        height: 0.42rem;
-        border-radius: 50%;
-        background: var(--amber);
-        box-shadow: 0 0 0 0.18rem rgb(216 197 140 / 14%);
-        content: '';
-      }
-
-      #status[data-tessera-status='ready']::before,
-      #status[data-tessera-status='probe-passed']::before {
-        background: var(--mint);
-        box-shadow: 0 0 0 0.18rem rgb(181 211 156 / 14%);
-      }
-
-      #status[data-tessera-status='fatal']::before {
-        background: var(--rose);
-        box-shadow: 0 0 0 0.18rem rgb(228 154 154 / 14%);
       }
 
       .lab-nav {
