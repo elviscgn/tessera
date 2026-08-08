@@ -124,9 +124,36 @@ Tessera keeps decisions recorded with their context, alternatives, and reversibi
 
 **Reversibility:** Crate boundaries can be reorganized; the extension seam is an explicit future decision gate.
 
+### D11 — Grow into an engine through a real arena, not a universal abstraction
+
+**Context:** The v0.1 foundation proves deterministic grid interactions, while a Bobble League-like game needs continuous motion, turns, collisions, scoring, replay, and eventually an authoritative session. Adding generic gameplay interfaces before one complete game exists would make the public boundary vague and difficult to change.
+
+**Decision:** Keep v0.1 as the stable grid-first runtime and add a separately gated engine track. Use a small local arena vertical slice as the validation consumer. Match rules, formations, teams, scores, and power plays remain in consumer-owned Rust; Tessera owns the deterministic runtime, protocol, motion foundation, renderer projection, persistence, and test surfaces. Promote a hook or crate only when the local slice and an outside-workspace consumer both require it.
+
+**Alternatives:** Declare Tessera a placement framework forever (rejected: it would prevent a useful class of game); add a universal gameplay trait/plugin ABI now (rejected: no evidence for its shape); make TypeScript/Babylon own arena physics (rejected: breaks native/Wasm parity and replay).
+
+**Evidence:** Engine-track capability audit, local arena replay/hash fixtures, native authoritative-session proof, and external-consumer composition check.
+
+**Reversibility:** The engine track is additive. If the arena fails to justify a reusable seam, retain the v0.1 runtime and keep the consumer-specific systems outside the framework.
+
+### D12 — Narrow fixed-point arena physics before general physics
+
+**Context:** A tabletop sports game needs reproducible motion and collisions, but a general physics engine would introduce floating-point and integration risks before the workload is understood.
+
+**Decision:** Arena authority uses versioned signed fixed-point micrometre units with checked arithmetic, wider intermediates, explicit rounding, stable contact ordering, and a scenario-declared deterministic substep count. The first collision model covers dynamic circles against static boundaries and goal volumes, with friction, bounce, impulses, rest thresholds, and a bounded turn budget. Renderer interpolation and Babylon collision helpers remain presentation-only.
+
+**Alternatives:** Use platform floats as authority (rejected: parity and replay risk); adopt a third-party physics engine immediately (rejected: scope and determinism are not yet proven); implement arbitrary mesh collision (rejected: unnecessary for the first vertical slice).
+
+**Evidence:** Geometry property tests, collision golden vectors, overflow fixtures, native/Wasm parity, long-run replays, and the M20 arena workload.
+
+**Reversibility:** The fixed-point unit and protocol are versioned. A measured replacement would require a new protocol/schema version and a replay migration; no silent change is allowed.
+
 ## Open decision gates
 
 - Consumer-owned Rust composition (Ustawi-driven, after v0.1).
+- Engine-track composition seam after the local arena and outside-workspace proofs.
+- Protocol v2 capability negotiation for continuous transforms and semantic arena commands.
+- Server-authoritative session versus lockstep/prediction/rollback after offline arena evidence.
 - Shared-memory transport adoption (measured evidence required).
 - Thin-instance defaulting (measured evidence required).
 - npm publishing scope and package name (owner decision pending).

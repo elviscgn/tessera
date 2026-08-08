@@ -55,6 +55,8 @@ The workspace has four crates from the beginning:
 - `tessera-wasm` is the narrow Rust/JavaScript adapter;
 - `tessera-cli` runs scenarios, replays, checksums, and diagnostics natively.
 
+The continuous-arena track may add a browser-independent `tessera-physics` crate only after an architecture review proves that geometry, collision, and test ownership deserve a separate boundary. It is not a general-purpose physics engine and it never owns a second world. Match rules, scoring, formations, and power plays stay in the consumer's Rust composition.
+
 `tessera-core` does not depend on the protocol crate, browser bindings, Babylon.js, React, or browser storage. The protocol crate is intentionally independent of the browser so the Wasm adapter, CLI, replay tools, and contract tests use the same definitions.
 
 The core uses a generational arena and normalized component stores. An entity is `(slot: u32, generation: u32)`, and renderer mappings reject a stale generation. Active slots are visited in a stable order. This keeps mutation straightforward while making replay, serialization, and native/Wasm comparison explicit.
@@ -68,6 +70,18 @@ The simulation runs at a fixed 20 Hz. Rust advances ticks; the browser only requ
 Authoritative placement values use signed integer grid coordinates, millimetre elevation, integer footprints, and four quarter-turn rotations. Randomness uses ChaCha8 with a versioned 32-byte seed. Meaningful state is encoded field by field in a canonical little-endian stream and hashed with BLAKE3. Rust memory layout, JSON formatting, Babylon objects, render timing, and diagnostics are not part of the hash.
 
 Invalid and duplicate commands consume their sequence, produce deterministic rejection events, and leave the simulation unchanged. Native replay records the assigned tick and sequence so the same command log can be compared with the Wasm run.
+
+## Engine evolution: from grid worlds to continuous arenas
+
+The v0.1 runtime is grid-first, but its authority boundary is deliberately wider than placement. A future arena scenario uses the same generational entity registry, command scheduler, event sequence, snapshots, save boundary, and canonical hash with additional normalized stores for fixed-point position, velocity, colliders, teams, match phase, score, and turn deadlines.
+
+Arena motion is authoritative Rust state. Positions, velocities, impulses, collision outcomes, goals, rest thresholds, and timeouts use versioned signed fixed-point integers; arithmetic is checked with wider intermediates and explicit rounding. A scenario may request a fixed number of deterministic substeps per public tick, but substeps never become wall-clock catch-up and a turn has a maximum tick budget. Initial collision scope is intentionally narrow: dynamic circles against static boundaries and goal volumes, with stable contact ordering and explicit simultaneous-outcome rules.
+
+The public command remains a semantic intent: formation edit, ready/cancel, aim-and-release, or power activation. The browser can capture a drag and draw an aim preview, but it cannot submit pointer samples as simulation state or resolve a shot. Reliable events describe phase changes, accepted/rejected commands, shot resolution, goals, power plays, and match completion. Replays store those commands with assigned ticks and sequences, so an instant replay can rebuild from the same log rather than recording renderer frames.
+
+The renderer gains an arena camera profile and presentation interpolation between complete snapshots. Interpolation, trails, impacts, score transitions, and animation timelines are disposable; they reset on world-generation changes and never enter the state hash. Babylon remains a projection that can be rebuilt after a dropped snapshot, a context loss, or a replay seek.
+
+The first proof is a local two-side vertical slice. A later native authoritative-session proof reuses the same command and event semantics for network readiness. Prediction, rollback, matchmaking, and hosted services are separate decisions and do not change the offline simulation contract.
 
 ## Worker boundary
 
@@ -122,7 +136,7 @@ The project starts with ordinary Babylon instances because they support per-inst
 
 The camera is a right-handed orthographic projection aligned with glTF. `+X` is east, `+Y` is up, and `+Z` is south. The presentation camera uses a mathematically symmetric isometric pitch, four clockwise quarter-turns, a target measured in millimetres, and a zoom expressed as visible tile height. Its pure `CameraProjection` model is shared by Babylon synchronization, screen/world/grid conversion, and the coordinate laboratory. Negative world boundaries use floor division, so `-1 mm` belongs to cell `-1` for a `1,000 mm` tile. Camera state remains presentation state and cannot affect Rust hashes or commands.
 
-## Current implementation
+## Current implementation (v0.1)
 
 Milestones 3 through 11 provide the lifecycle, camera, occupancy, selection, placement, scalable-renderer, persistence, observability, and Scenario Lab foundation:
 
@@ -176,6 +190,6 @@ sequenceDiagram
 
 The preview is advisory. The placement command always revalidates the footprint in Rust, so a cell becoming occupied between the query and the command cannot create a divergent world.
 
-## Deliberate exclusions
+## Deliberate exclusions from v0.1
 
-The first release does not include Ustawi gameplay, networking, physics, mobile/touch input, arbitrary executable scenarios, shared-memory transport, WebGPU requirements, or a consumer-owned Rust plugin ABI. These boundaries are revisited only when measured evidence or a real consumer need justifies them.
+The first release does not include Ustawi gameplay, continuous arena physics, networking, mobile/touch input, arbitrary executable scenarios, shared-memory transport, WebGPU requirements, or a consumer-owned Rust plugin ABI. Physics and networking are planned after the v0.1 foundation, but they must pass the deterministic arena and authoritative-session gates before becoming public framework promises.

@@ -189,6 +189,21 @@ Records use the same 8-byte header as commands. Event opcodes:
 
 Event records carry a monotonically increasing `event_sequence`. A batch must be contiguous: `first_sequence` through `last_sequence` with no gaps. The main thread acknowledges the highest contiguous sequence it has consumed; a detected gap triggers retransmission and, if continuity cannot be restored, the runtime enters `event_stream_desynced` and requires an authoritative resynchronization. Events are never silently dropped.
 
+## Engine-track extension (protocol v2)
+
+The v0.1 protocol remains valid for grid-first consumers. A future continuous-arena consumer negotiates protocol version 2 and an explicit capability set before sending arena data. A v2 peer must fail closed when it does not understand an authoritative capability; it may ignore an optional presentation capability only when the descriptor marks it optional.
+
+Arena commands are semantic records, not input streams:
+
+- formation edit with selected entity handles and validated target positions;
+- ready/cancel and turn ownership changes;
+- aim-and-release with quantized direction, power, and selected actor;
+- power activation with a consumer-defined power handle.
+
+The command carries the same client sequence and assigned-tick rules as v1. Pointer samples, animation frames, and collision contacts never become commands. Reliable v2 events add phase/turn transitions, shot accepted or rejected, shot resolved, goal scored, power-play changes, timeout, and match completion. Event sequence, retransmission, acknowledgement, and resynchronization rules do not change.
+
+V2 render descriptors may add optional structure-of-arrays regions for fixed-point continuous position, linear velocity, angular state, collider/visibility flags, team or owner handle, and presentation timeline state. Authoritative fixed-point values use signed 64-bit micrometre units; arithmetic and canonical hashes use the Rust-defined encoding, not Babylon matrices or JavaScript numbers. Match phase and score are authoritative events and snapshot metadata, so a renderer can rebuild after a dropped frame or replay seek.
+
 ## Structured error codes
 
 Errors are reported as stable codes rather than browser-specific exceptions:
