@@ -51,7 +51,7 @@ export function lerpMicros(from: number, to: number, alpha: number): number {
 }
 
 /** Interpolates every persisted body across two consecutive snapshots. */
-export function interpolateSnapshotPair(
+function interpolateSnapshotPair(
   previous: ArenaSnapshot,
   next: ArenaSnapshot,
   alpha: number,

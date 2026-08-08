@@ -4,7 +4,7 @@
 // rust/crates/tessera-arena/src/simulation.rs byte for byte. Fixed-point
 // values cross as scaled raw integers: micro * MICROMETRE_SCALE (1024).
 
-export const MICROMETRE_SCALE = 1024;
+const MICROMETRE_SCALE = 1024;
 
 export interface ArenaPlacePayload {
   body: number;
@@ -55,7 +55,7 @@ function pushI64(bytes: number[], value: bigint): void {
 }
 
 /** Appends one encoded command to an accumulating byte list. */
-export function pushEncodedArenaCommand(bytes: number[], command: ArenaCommand): void {
+function pushEncodedArenaCommand(bytes: number[], command: ArenaCommand): void {
   switch (command.kind) {
     case 'place': {
       const payload = command.payload;

@@ -50,16 +50,7 @@ export class ArenaWasm {
      * @returns {string}
      */
     drain_events() {
-        let deferred1_0;
-        let deferred1_1;
-        try {
-            const ret = wasm.arenawasm_drain_events(this.__wbg_ptr);
-            deferred1_0 = ret[0];
-            deferred1_1 = ret[1];
-            return getStringFromWasm0(ret[0], ret[1]);
-        } finally {
-            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-        }
+        return readStringResult(this.__wbg_ptr, 'arenawasm_drain_events');
     }
     /**
      * Whether the match is over.
@@ -129,32 +120,14 @@ export class ArenaWasm {
      * @returns {string}
      */
     state_hash_hex() {
-        let deferred1_0;
-        let deferred1_1;
-        try {
-            const ret = wasm.arenawasm_state_hash_hex(this.__wbg_ptr);
-            deferred1_0 = ret[0];
-            deferred1_1 = ret[1];
-            return getStringFromWasm0(ret[0], ret[1]);
-        } finally {
-            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-        }
+        return readStringResult(this.__wbg_ptr, 'arenawasm_state_hash_hex');
     }
     /**
      * Serializes the live bodies and match status as JSON.
      * @returns {string}
      */
     state_snapshot() {
-        let deferred1_0;
-        let deferred1_1;
-        try {
-            const ret = wasm.arenawasm_state_snapshot(this.__wbg_ptr);
-            deferred1_0 = ret[0];
-            deferred1_1 = ret[1];
-            return getStringFromWasm0(ret[0], ret[1]);
-        } finally {
-            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-        }
+        return readStringResult(this.__wbg_ptr, 'arenawasm_state_snapshot');
     }
     /**
      * Submits a batch of encoded arena commands for the next tick.
@@ -399,6 +372,19 @@ function readU8Result(ret) {
     const value = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return value;
+}
+
+function readStringResult(ptr, methodName) {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm[methodName](ptr);
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
 }
 
 function __wbg_get_imports() {

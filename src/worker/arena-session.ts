@@ -64,10 +64,6 @@ export class ArenaSession {
     this.options = options;
   }
 
-  public id(): string {
-    return this.options.id;
-  }
-
   /** Encodes and submits a batch of arena commands. */
   public apply(commands: readonly ArenaCommand[]): void {
     this.core.submit_command_batch(encodeArenaBatch(commands));
