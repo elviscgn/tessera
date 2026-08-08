@@ -119,8 +119,7 @@ const setStatus = (value: string, details: Readonly<Record<string, string>> = {}
   status.dataset.tesseraStatus = value;
   telemetry.dataset.tesseraStatus = value;
   setStatusDetails(details);
-  const tickSuffix = details.tick === undefined ? '' : ` · tick ${details.tick}`;
-  status.textContent = `Tessera ${value}${tickSuffix}`;
+  status.textContent = details.tick === undefined ? `Tessera ${value}` : `tick ${details.tick}`;
 };
 
 const clockLabel = (testBridge: TesseraTestBridge | undefined): string =>
