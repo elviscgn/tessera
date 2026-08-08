@@ -91,6 +91,12 @@ jobs:
       - name: build Wasm target
         run: pnpm check:wasm
 
+      - name: upload regenerated wasm
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-wasm
+          path: src/worker/wasm/tessera_wasm_bg.wasm
+
       - name: build production shell
         run: pnpm build
 
