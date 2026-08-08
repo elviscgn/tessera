@@ -2,12 +2,15 @@
 
 //! Native Tessera tooling and deterministic performance harnesses.
 
+mod arena;
+
 use std::env;
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use tessera_arena::ArenaLayout;
 use tessera_core::{Command, CommandEnvelope, Footprint, GridPosition, QuarterTurn, Simulation};
 
 const OBJECT_TYPE_ID: &str = "performance/foundation";
@@ -55,9 +58,134 @@ fn run() -> Result<(), Box<dyn Error>> {
     let mut arguments = env::args().skip(1);
     match arguments.next().as_deref() {
         Some("bench") => run_benchmark(parse_bench_options(arguments)?),
+        Some("arena") => run_arena(arguments),
         Some(command) => Err(format!("unknown command: {command}").into()),
-        None => Err("missing command: expected bench".into()),
+        None => Err("missing command: expected bench or arena".into()),
     }
+}
+
+fn run_arena<I>(arguments: I) -> Result<(), Box<dyn Error>>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut arguments = arguments.into_iter();
+    let Some(subcommand) = arguments.next() else {
+        return Err("arena requires a subcommand: play".into());
+    };
+    match subcommand.as_str() {
+        "play" => {
+            let options = parse_arena_play_options(arguments)?;
+            let report = arena::run_match(&options)?;
+            if let Some(output) = options.report_output.as_ref() {
+                if let Some(parent) = output.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::write(
+                    output,
+                    format!(
+                        "{}\n",
+                        serde_json::to_string_pretty(&arena_report_json(&report))?
+                    ),
+                )?;
+                println!("wrote arena match report to {}", output.display());
+            }
+            println!(
+                "arena match: score {}-{} ({}), turns {}, tick {}, final hash {}",
+                report.score.0,
+                report.score.1,
+                report
+                    .winner
+                    .map(|side| format!("side {side} wins"))
+                    .unwrap_or_else(|| "no winner".to_owned()),
+                report.turns_played,
+                report.final_tick,
+                report.state_hash_hex,
+            );
+            if !report.replay_reproduced {
+                return Err("replay verification failed: rebuilt hash differs".into());
+            }
+            Ok(())
+        }
+        other => Err(format!("unknown arena subcommand: {other}").into()),
+    }
+}
+
+fn parse_arena_play_options<I>(arguments: I) -> Result<arena::ArenaPlayOptions, Box<dyn Error>>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut options = arena::ArenaPlayOptions {
+        layout: ArenaLayout::standard(),
+        win_goals: 5,
+        max_turns: 24,
+        power_milli: arena::DEFAULT_POWER_MILLI,
+        report_output: None,
+        replay_output: None,
+    };
+    let mut arguments = arguments.into_iter();
+    while let Some(argument) = arguments.next() {
+        match argument.as_str() {
+            "--win-goals" => {
+                options.win_goals = parse_positive(&mut arguments, "win-goals")? as u32
+            }
+            "--max-turns" => {
+                options.max_turns = parse_positive(&mut arguments, "max-turns")? as u32
+            }
+            "--power-milli" => {
+                options.power_milli = parse_positive(&mut arguments, "power-milli")? as u16;
+                if options.power_milli > 1_000 {
+                    return Err("power-milli must be no greater than 1000".into());
+                }
+            }
+            "--layout" => {
+                let value = required_value(&mut arguments, "layout")?;
+                options.layout = match value.as_str() {
+                    "standard" => ArenaLayout::standard(),
+                    "small" => ArenaLayout::test_small(),
+                    other => return Err(format!("unknown layout: {other}").into()),
+                };
+            }
+            "--output" => {
+                options.report_output =
+                    Some(PathBuf::from(required_value(&mut arguments, "output")?))
+            }
+            "--replay" => {
+                options.replay_output =
+                    Some(PathBuf::from(required_value(&mut arguments, "replay")?))
+            }
+            "--help" | "-h" => {
+                println!(
+                    "tessera-cli arena play [--win-goals N] [--max-turns N] \
+                     [--power-milli N] [--layout standard|small] [--output PATH] [--replay PATH]"
+                );
+                std::process::exit(0);
+            }
+            _ => return Err(format!("unknown arena play option: {argument}").into()),
+        }
+    }
+    Ok(options)
+}
+
+fn arena_report_json(report: &arena::ArenaMatchReport) -> serde_json::Value {
+    serde_json::json!({
+        "schema": "tessera.arena.match",
+        "schemaVersion": 1,
+        "layoutWidthMicrometres": report.layout_width_micrometres,
+        "layoutDepthMicrometres": report.layout_depth_micrometres,
+        "winGoals": report.win_goals,
+        "maxTurns": report.max_turns,
+        "turnsPlayed": report.turns_played,
+        "finalTick": report.final_tick,
+        "score": [report.score.0, report.score.1],
+        "matchOver": report.match_over,
+        "winner": report.winner,
+        "goals": report.goals.iter().map(|(tick, side)| {
+            serde_json::json!({ "tick": tick, "side": side })
+        }).collect::<Vec<_>>(),
+        "stateHashHex": report.state_hash_hex,
+        "replayCommands": report.replay_commands,
+        "replayReproduced": report.replay_reproduced,
+    })
 }
 
 fn parse_bench_options<I>(arguments: I) -> Result<BenchOptions, Box<dyn Error>>

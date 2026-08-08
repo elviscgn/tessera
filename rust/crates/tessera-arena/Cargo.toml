@@ -1,0 +1,12 @@
+[package]
+name = "tessera-arena"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+blake3 = { version = "=1.8.5", default-features = false, features = ["pure"] }
+
+[lints]
+workspace = true

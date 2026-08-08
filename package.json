@@ -44,6 +44,7 @@
     "check:package": "node scripts/check-package.mjs",
     "check:release": "node scripts/check-release.mjs",
     "check:external-consumer": "node scripts/check-external-consumer.mjs",
+    "check:arena-consumer": "node scripts/check-arena-external-consumer.mjs",
     "dev": "vite",
     "build": "pnpm build:wasm && vite build",
     "check:production-testkit": "node scripts/check-production-testkit.mjs",

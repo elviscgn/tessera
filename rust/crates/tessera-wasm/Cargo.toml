@@ -6,8 +6,10 @@ license.workspace = true
 publish = false
 
 [dependencies]
+tessera-arena = { path = "../tessera-arena" }
 tessera-core = { path = "../tessera-core" }
 tessera-protocol = { path = "../tessera-protocol" }
+serde_json = "=1.0.145"
 wasm-bindgen = { version = "=0.2.126", default-features = false }
 
 [lib]

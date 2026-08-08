@@ -2,6 +2,74 @@
 /* eslint-disable */
 
 /**
+ * One authoritative arena simulation instance owned by a dedicated Worker.
+ */
+export class ArenaWasm {
+    free(): void;
+    [Symbol.dispose](): void;
+    /**
+     * Advances exactly one tick.
+     */
+    advance_one_tick(): void;
+    /**
+     * Advances up to `MAX_ARENA_TICKS_PER_CALL` ticks.
+     */
+    advance_ticks(count: bigint): void;
+    /**
+     * Marks the instance closed. Disposal is idempotent.
+     */
+    dispose(): void;
+    /**
+     * Serializes and clears the event log.
+     */
+    drain_events(): string;
+    /**
+     * Whether the match is over.
+     */
+    is_complete(): boolean;
+    /**
+     * Creates an arena with the standard layout and a win target.
+     */
+    constructor(win_goals: number);
+    /**
+     * Creates an arena from explicit layout dimensions (millimetres).
+     */
+    static new_with_layout(width_mm: number, depth_mm: number, wall_mm: number, pocket_radius_mm: number, win_goals: number): ArenaWasm;
+    /**
+     * The current phase discriminant (0..3).
+     */
+    phase(): number;
+    /**
+     * The side in possession.
+     */
+    possession(): number;
+    /**
+     * The score as `[side0, side1]`.
+     */
+    score(): Uint32Array;
+    /**
+     * The canonical 64-character state hash.
+     */
+    state_hash_hex(): string;
+    /**
+     * Serializes the live bodies and match status as JSON.
+     */
+    state_snapshot(): string;
+    /**
+     * Submits a batch of encoded arena commands for the next tick.
+     */
+    submit_command_batch(bytes: Uint8Array): Uint8Array;
+    /**
+     * The current tick.
+     */
+    tick(): bigint;
+    /**
+     * Checks a prospective placement without mutating state.
+     */
+    validate_placement(radius_micros: bigint, x_micros: bigint, z_micros: bigint): boolean;
+}
+
+/**
  * One authoritative simulation instance owned by a dedicated Worker.
  */
 export class TesseraWasm {
@@ -78,6 +146,22 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly __wbg_arenawasm_free: (a: number, b: number) => void;
+    readonly arenawasm_advance_one_tick: (a: number) => [number, number];
+    readonly arenawasm_advance_ticks: (a: number, b: bigint) => [number, number];
+    readonly arenawasm_dispose: (a: number) => void;
+    readonly arenawasm_drain_events: (a: number) => [number, number];
+    readonly arenawasm_is_complete: (a: number) => number;
+    readonly arenawasm_new: (a: number) => [number, number, number];
+    readonly arenawasm_new_with_layout: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly arenawasm_phase: (a: number) => number;
+    readonly arenawasm_possession: (a: number) => number;
+    readonly arenawasm_score: (a: number) => [number, number];
+    readonly arenawasm_state_hash_hex: (a: number) => [number, number];
+    readonly arenawasm_state_snapshot: (a: number) => [number, number];
+    readonly arenawasm_submit_command_batch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly arenawasm_tick: (a: number) => bigint;
+    readonly arenawasm_validate_placement: (a: number, b: bigint, c: bigint, d: bigint) => number;
     readonly __wbg_tesserawasm_free: (a: number, b: number) => void;
     readonly tesserawasm_ack_events: (a: number, b: bigint) => [number, number];
     readonly tesserawasm_adapter_version: (a: number) => number;

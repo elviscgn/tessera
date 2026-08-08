@@ -26,19 +26,23 @@ Tessera is delivered in small checkpoints so each release keeps a clear, reviewa
 
 The v0.1 release surface is complete. The remaining work is owner-level release activity: choose and review the release version, push its matching tag, and inspect the attached artifact and checksum. The tag workflow repeats the release gate and creates the GitHub release; it does not publish to npm. Future consumer-owned Rust gameplay depends on the Ustawi-driven composition decision gate.
 
+## Engine track (M16–M23)
+
+The planned engine track milestones M16–M23 are implemented on the `rust/crates/tessera-arena` crate and its Wasm/session/presentation companions: fixed-point continuous physics (10 fractional bits, i64, pure deterministic integer arithmetic), arena geometry, dynamic bodies, phases and turns, semantic commands, narrow deterministic collision, goals, friction and bounce, bounded resolution, replay, and a canonical state hash. The Wasm adapter proves byte parity against the native engine through a pinned probe hash; a headless CLI match (`tessera-cli arena play`) exercises the vertical slice and verifies replay reproduction; an outside-workspace consumer crate (`examples/arena-external-consumer`) proves the seam via `scripts/check-arena-external-consumer.mjs`. Remaining engine-track consolidation before any tag: full-suite green (Rust, Wasm parity, presentation, session), documentation updates, and issue evidence.
+
 ## Planned checkpoints
 
-| Milestone | Focus                                                                                                            |
-| --------- | ---------------------------------------------------------------------------------------------------------------- |
-| —         | Post-release owner activity: tag the v0.1 artifact, record release evidence, and review the foundation           |
-| 16        | Audit the engine capabilities required by a continuous tabletop arena and lock the fixed-point/protocol contract |
-| 17        | Add deterministic arena geometry and continuous transform state                                                  |
-| 18        | Add dynamic bodies, match phases, turns, and semantic arena commands                                             |
-| 19        | Add narrow deterministic collision, goals, friction, bounce, and bounded resolution                              |
-| 20        | Prove a local Bobble League-like vertical slice with formation, aim, scoring, power plays, and replay            |
-| 21        | Add arena camera, interpolation, animation, event-driven presentation, and content workflows                     |
-| 22        | Prove an authoritative native session and network-ready command/event semantics                                  |
-| 23        | Prove outside-workspace Rust composition and the engine-track release boundary                                   |
+| Milestone | Focus                                                                                                            | Status                                                     |
+| --------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| —         | Post-release owner activity: tag the v0.1 artifact, record release evidence, and review the foundation           | pending owner sign-off                                     |
+| 16        | Audit the engine capabilities required by a continuous tabletop arena and lock the fixed-point/protocol contract | implemented (`tessera-arena` fixed-point + encoding)       |
+| 17        | Add deterministic arena geometry and continuous transform state                                                  | implemented (`ArenaLayout`, discs, `Vec2`/`Fixed`)         |
+| 18        | Add dynamic bodies, match phases, turns, and semantic arena commands                                             | implemented (`ArenaSimulation`, phases, turns, commands)   |
+| 19        | Add narrow deterministic collision, goals, friction, bounce, and bounded resolution                              | implemented (narrow pairs, pockets, restitution, timeouts) |
+| 20        | Prove a local Bobble League-like vertical slice with formation, aim, scoring, power plays, and replay            | implemented (`tessera-cli arena play` + tests)             |
+| 21        | Add arena camera, interpolation, animation, event-driven presentation, and content workflows                     | implemented (`src/presentation/arena`)                     |
+| 22        | Prove an authoritative native session and network-ready command/event semantics                                  | implemented (`ArenaSession`, Wasm parity, rejections)      |
+| 23        | Prove outside-workspace Rust composition and the engine-track release boundary                                   | implemented (`examples/arena-external-consumer`)           |
 
 ## Beyond v0.1
 

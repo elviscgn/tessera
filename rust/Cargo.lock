@@ -211,10 +211,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tessera-arena"
+version = "0.0.0"
+dependencies = [
+ "blake3",
+]
+
+[[package]]
 name = "tessera-cli"
 version = "0.0.0"
 dependencies = [
  "serde_json",
+ "tessera-arena",
  "tessera-core",
 ]
 
@@ -239,6 +247,8 @@ dependencies = [
 name = "tessera-wasm"
 version = "0.0.0"
 dependencies = [
+ "serde_json",
+ "tessera-arena",
  "tessera-core",
  "tessera-protocol",
  "wasm-bindgen",
