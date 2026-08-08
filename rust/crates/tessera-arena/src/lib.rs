@@ -18,5 +18,5 @@ pub use simulation::{
     ARENA_STATE_HASH_VERSION, ARENA_TICK_RATE_HZ, ArenaBody, ArenaCommand, ArenaError, ArenaEvent,
     ArenaSimulation, ArenaStateHash, DEFAULT_BALL_RADIUS_MICROS, DEFAULT_STRIKER_RADIUS_MICROS,
     MAX_RELEASE_TICKS, MAX_SHOT_VELOCITY, POWER_DOUBLE_SHOT, Phase, REST_SPEED, ReplayCommand,
-    ReplayLog, Velocity,
+    ReplayLog, Velocity, decode_arena_command, encode_arena_command,
 };

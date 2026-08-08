@@ -2,6 +2,10 @@
 
 //! Coarse wasm-bindgen adapter for the browser simulation Worker.
 
+mod arena;
+
+pub use arena::{ARENA_WASM_ADAPTER_VERSION, ArenaWasm, MAX_ARENA_TICKS_PER_CALL};
+
 use tessera_core::{
     Footprint, FootprintError, FootprintOffset, GridConfigurationError, GridPosition, QuarterTurn,
     SaveError, Seed, Simulation, SimulationError,

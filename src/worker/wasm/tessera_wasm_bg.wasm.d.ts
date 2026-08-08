@@ -1,6 +1,22 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const __wbg_arenawasm_free: (a: number, b: number) => void;
+export const arenawasm_advance_one_tick: (a: number) => [number, number];
+export const arenawasm_advance_ticks: (a: number, b: bigint) => [number, number];
+export const arenawasm_dispose: (a: number) => void;
+export const arenawasm_drain_events: (a: number) => [number, number];
+export const arenawasm_is_complete: (a: number) => number;
+export const arenawasm_new: (a: number) => [number, number, number];
+export const arenawasm_new_with_layout: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+export const arenawasm_phase: (a: number) => number;
+export const arenawasm_possession: (a: number) => number;
+export const arenawasm_score: (a: number) => [number, number];
+export const arenawasm_state_hash_hex: (a: number) => [number, number];
+export const arenawasm_state_snapshot: (a: number) => [number, number];
+export const arenawasm_submit_command_batch: (a: number, b: number, c: number) => [number, number, number, number];
+export const arenawasm_tick: (a: number) => bigint;
+export const arenawasm_validate_placement: (a: number, b: bigint, c: bigint, d: bigint) => number;
 export const __wbg_tesserawasm_free: (a: number, b: number) => void;
 export const tesserawasm_ack_events: (a: number, b: bigint) => [number, number];
 export const tesserawasm_adapter_version: (a: number) => number;

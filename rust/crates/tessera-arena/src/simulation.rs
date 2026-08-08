@@ -121,6 +121,8 @@ pub enum ArenaError {
     SequenceDuplicate,
     /// The ball is required for the command.
     NoBall,
+    /// A command byte stream did not parse.
+    InvalidEncoding,
 }
 
 /// A semantic arena command (engine-track M18).
@@ -906,7 +908,7 @@ fn velocity_as_vec2(velocity: Velocity) -> Vec2 {
 
 /// The state-hash encoding keeps the command discriminant in the first byte,
 /// matching the replay fixture bytes in tests and the protocol layer.
-pub(crate) fn encode_arena_command(out: &mut Vec<u8>, command: &ArenaCommand) {
+pub fn encode_arena_command(out: &mut Vec<u8>, command: &ArenaCommand) {
     match command {
         ArenaCommand::Place {
             body,
@@ -953,4 +955,86 @@ pub(crate) fn encode_arena_command(out: &mut Vec<u8>, command: &ArenaCommand) {
             out.extend_from_slice(&handle.to_le_bytes());
         }
     }
+}
+
+/// Decodes one arena command from the front of `bytes`, returning the command
+/// and the offset of the next command. Mirrors [`encode_arena_command`].
+pub fn decode_arena_command(bytes: &[u8]) -> Result<(ArenaCommand, usize), ArenaError> {
+    let take = |offset: usize, count: usize| -> Result<&[u8], ArenaError> {
+        let end = offset
+            .checked_add(count)
+            .ok_or(ArenaError::InvalidEncoding)?;
+        bytes.get(offset..end).ok_or(ArenaError::InvalidEncoding)
+    };
+    let Some((&discriminant, _)) = bytes.split_first() else {
+        return Err(ArenaError::InvalidEncoding);
+    };
+    let mut offset = 1;
+    let command = match discriminant {
+        1 => {
+            let body = u32::from_le_bytes(take(offset, 4)?.try_into().unwrap());
+            offset += 4;
+            let radius_micros = i64::from_le_bytes(take(offset, 8)?.try_into().unwrap());
+            offset += 8;
+            let x = i64::from_le_bytes(take(offset, 8)?.try_into().unwrap());
+            offset += 8;
+            let z = i64::from_le_bytes(take(offset, 8)?.try_into().unwrap());
+            offset += 8;
+            let side = take(offset, 1)?[0];
+            offset += 1;
+            let ball = take(offset, 1)?[0] != 0;
+            offset += 1;
+            ArenaCommand::Place {
+                body,
+                position: Vec2::from_raw(x, z),
+                radius_micros,
+                side,
+                ball,
+            }
+        }
+        2 => {
+            let body = u32::from_le_bytes(take(offset, 4)?.try_into().unwrap());
+            offset += 4;
+            let x = i64::from_le_bytes(take(offset, 8)?.try_into().unwrap());
+            offset += 8;
+            let z = i64::from_le_bytes(take(offset, 8)?.try_into().unwrap());
+            offset += 8;
+            ArenaCommand::Move {
+                body,
+                position: Vec2::from_raw(x, z),
+            }
+        }
+        3 => {
+            let body = u32::from_le_bytes(take(offset, 4)?.try_into().unwrap());
+            offset += 4;
+            ArenaCommand::Remove { body }
+        }
+        4 => {
+            let side = take(offset, 1)?[0];
+            offset += 1;
+            ArenaCommand::StartTurn { side }
+        }
+        5 => {
+            let x = i64::from_le_bytes(take(offset, 8)?.try_into().unwrap());
+            offset += 8;
+            let z = i64::from_le_bytes(take(offset, 8)?.try_into().unwrap());
+            offset += 8;
+            let power_milli = u16::from_le_bytes(take(offset, 2)?.try_into().unwrap());
+            offset += 2;
+            ArenaCommand::Aim {
+                direction: Vec2::from_raw(x, z),
+                power_milli,
+            }
+        }
+        6 => ArenaCommand::Release,
+        7 => {
+            let side = take(offset, 1)?[0];
+            offset += 1;
+            let handle = u32::from_le_bytes(take(offset, 4)?.try_into().unwrap());
+            offset += 4;
+            ArenaCommand::Power { side, handle }
+        }
+        _ => return Err(ArenaError::InvalidEncoding),
+    };
+    Ok((command, offset))
 }

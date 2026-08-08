@@ -3,7 +3,8 @@
 
 use tessera_arena::{
     ArenaCommand, ArenaError, ArenaEvent, ArenaLayout, ArenaSimulation, Fixed, POWER_DOUBLE_SHOT,
-    Phase, REST_SPEED, ReplayCommand, ReplayLog, Vec2, Velocity,
+    Phase, REST_SPEED, ReplayCommand, ReplayLog, Vec2, Velocity, decode_arena_command,
+    encode_arena_command,
 };
 
 fn standard() -> ArenaSimulation {
@@ -372,6 +373,58 @@ fn replay_rejects_out_of_order_records() {
     assert!(matches!(
         ArenaSimulation::replay(ArenaLayout::test_small(), 3, &log),
         Err(ArenaError::TickOrderViolation)
+    ));
+}
+
+#[test]
+fn command_encoding_round_trips_through_wire_bytes() {
+    let commands = vec![
+        ArenaCommand::Place {
+            body: 1,
+            position: Vec2::from_micro(-100_000, 200_000),
+            radius_micros: 45_000,
+            side: 0,
+            ball: true,
+        },
+        ArenaCommand::Move {
+            body: 1,
+            position: Vec2::from_micro(10_000, -10_000),
+        },
+        ArenaCommand::Remove { body: 2 },
+        ArenaCommand::StartTurn { side: 1 },
+        ArenaCommand::Aim {
+            direction: Vec2::from_micro(1, 2),
+            power_milli: 650,
+        },
+        ArenaCommand::Release,
+        ArenaCommand::Power {
+            side: 1,
+            handle: POWER_DOUBLE_SHOT,
+        },
+    ];
+    let mut bytes = Vec::new();
+    for command in &commands {
+        encode_arena_command(&mut bytes, command);
+    }
+    let mut offset = 0;
+    for expected in &commands {
+        let (decoded, next) = decode_arena_command(&bytes[offset..]).expect("decode");
+        assert_eq!(&decoded, expected);
+        offset += next;
+    }
+    assert_eq!(offset, bytes.len(), "all bytes consumed");
+
+    assert!(matches!(
+        decode_arena_command(&[]),
+        Err(ArenaError::InvalidEncoding)
+    ));
+    assert!(matches!(
+        decode_arena_command(&[0xff]),
+        Err(ArenaError::InvalidEncoding)
+    ));
+    assert!(matches!(
+        decode_arena_command(&[1, 0, 0, 0]),
+        Err(ArenaError::InvalidEncoding)
     ));
 }
 

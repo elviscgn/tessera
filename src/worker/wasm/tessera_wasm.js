@@ -1,6 +1,195 @@
 /* @ts-self-types="./tessera_wasm.d.ts" */
 
 /**
+ * One authoritative arena simulation instance owned by a dedicated Worker.
+ */
+export class ArenaWasm {
+    static __wrap(ptr) {
+        const obj = Object.create(ArenaWasm.prototype);
+        obj.__wbg_ptr = ptr;
+        ArenaWasmFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        ArenaWasmFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_arenawasm_free(ptr, 0);
+    }
+    /**
+     * Advances exactly one tick.
+     */
+    advance_one_tick() {
+        const ret = wasm.arenawasm_advance_one_tick(this.__wbg_ptr);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * Advances up to `MAX_ARENA_TICKS_PER_CALL` ticks.
+     * @param {bigint} count
+     */
+    advance_ticks(count) {
+        const ret = wasm.arenawasm_advance_ticks(this.__wbg_ptr, count);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * Marks the instance closed. Disposal is idempotent.
+     */
+    dispose() {
+        wasm.arenawasm_dispose(this.__wbg_ptr);
+    }
+    /**
+     * Serializes and clears the event log.
+     * @returns {string}
+     */
+    drain_events() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.arenawasm_drain_events(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * Whether the match is over.
+     * @returns {boolean}
+     */
+    is_complete() {
+        const ret = wasm.arenawasm_is_complete(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Creates an arena with the standard layout and a win target.
+     * @param {number} win_goals
+     */
+    constructor(win_goals) {
+        const ret = wasm.arenawasm_new(win_goals);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        this.__wbg_ptr = ret[0];
+        ArenaWasmFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * Creates an arena from explicit layout dimensions (millimetres).
+     * @param {number} width_mm
+     * @param {number} depth_mm
+     * @param {number} wall_mm
+     * @param {number} pocket_radius_mm
+     * @param {number} win_goals
+     * @returns {ArenaWasm}
+     */
+    static new_with_layout(width_mm, depth_mm, wall_mm, pocket_radius_mm, win_goals) {
+        const ret = wasm.arenawasm_new_with_layout(width_mm, depth_mm, wall_mm, pocket_radius_mm, win_goals);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ArenaWasm.__wrap(ret[0]);
+    }
+    /**
+     * The current phase discriminant (0..3).
+     * @returns {number}
+     */
+    phase() {
+        const ret = wasm.arenawasm_phase(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * The side in possession.
+     * @returns {number}
+     */
+    possession() {
+        const ret = wasm.arenawasm_possession(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * The score as `[side0, side1]`.
+     * @returns {Uint32Array}
+     */
+    score() {
+        const ret = wasm.arenawasm_score(this.__wbg_ptr);
+        var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
+    }
+    /**
+     * The canonical 64-character state hash.
+     * @returns {string}
+     */
+    state_hash_hex() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.arenawasm_state_hash_hex(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * Serializes the live bodies and match status as JSON.
+     * @returns {string}
+     */
+    state_snapshot() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.arenawasm_state_snapshot(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * Submits a batch of encoded arena commands for the next tick.
+     * @param {Uint8Array} bytes
+     * @returns {Uint8Array}
+     */
+    submit_command_batch(bytes) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.arenawasm_submit_command_batch(this.__wbg_ptr, ptr0, len0);
+        return readU8Result(ret);
+    }
+    /**
+     * The current tick.
+     * @returns {bigint}
+     */
+    tick() {
+        const ret = wasm.arenawasm_tick(this.__wbg_ptr);
+        return BigInt.asUintN(64, ret);
+    }
+    /**
+     * Checks a prospective placement without mutating state.
+     * @param {bigint} radius_micros
+     * @param {bigint} x_micros
+     * @param {bigint} z_micros
+     * @returns {boolean}
+     */
+    validate_placement(radius_micros, x_micros, z_micros) {
+        const ret = wasm.arenawasm_validate_placement(this.__wbg_ptr, radius_micros, x_micros, z_micros);
+        return ret !== 0;
+    }
+}
+if (Symbol.dispose) ArenaWasm.prototype[Symbol.dispose] = ArenaWasm.prototype.free;
+
+/**
  * One authoritative simulation instance owned by a dedicated Worker.
  */
 export class TesseraWasm {
@@ -239,9 +428,17 @@ function __wbg_get_imports() {
     };
 }
 
+const ArenaWasmFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_arenawasm_free(ptr, 1));
 const TesseraWasmFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_tesserawasm_free(ptr, 1));
+
+function getArrayU32FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getUint32ArrayMemory0().subarray(ptr / 4, ptr / 4 + len);
+}
 
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
