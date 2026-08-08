@@ -1,0 +1,52 @@
+name: wasm-resync
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.19.0
+          run_install: false
+
+      - name: install Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: install Rust
+        uses: dtolnay/rust-toolchain@eb7e7f22234696e8dae1c93708e6e98a3e4a1e0f # v1.0.0
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+
+      - name: install wasm-bindgen
+        run: |
+          cargo install wasm-bindgen-cli --version 0.2.126 --locked --root "${RUNNER_TEMP}/tessera-tools"
+          "${RUNNER_TEMP}/tessera-tools/bin/wasm-bindgen" --version | grep -E '^wasm-bindgen 0\.2\.126$'
+
+      - name: install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: build Wasm target
+        run: pnpm check:wasm
+
+      - name: upload regenerated wasm
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-wasm
+          path: src/worker/wasm/tessera_wasm_bg.wasm
