@@ -42,14 +42,7 @@ The Rust suite covers the rules that must be identical in native and browser run
 
 The protocol crate also tests little-endian command/event/render records, lengths, flags, opcodes, region descriptors, and contiguous event sequences.
 
-The engine-track arena suite adds fixed-point property tests, checked-arithmetic
-and overflow fixtures, swept-circle and boundary vectors, stable contact-order
-cases, simultaneous goal/timeout precedence, bounded substep resolution,
-formation and phase invariants, semantic command replays, and native/Wasm
-checkpoint hashes for complete matches. A high-precision reference calculation
-may be used to review vectors, but it is never the authority. Pointer samples,
-animation frames, and Babylon collision results are not accepted as simulation
-fixtures.
+The engine-track arena suite is implemented in `rust/crates/tessera-arena`: fixed-point exactness and sqrt determinism, disc overlap and contact normals, layout validation and placement bounds, phase/turn rejection, friction-rest resolution with timeout, wall bounces, deterministic narrow-pair contact impulse ordering, west/east pocket goals, double-shot power, replay/tick-order rejection, and canonical-hash stability across rebuilds. The Wasm boundary adds the pinned native-parity hash and the end-to-end `ArenaSession` leg. A high-precision reference calculation may be used to review vectors, but it is never the authority. Pointer samples, animation frames, and Babylon collision results are not accepted as simulation fixtures.
 
 ## Wasm and Worker boundary
 

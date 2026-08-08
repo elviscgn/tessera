@@ -132,7 +132,7 @@ Tessera keeps decisions recorded with their context, alternatives, and reversibi
 
 **Alternatives:** Declare Tessera a placement framework forever (rejected: it would prevent a useful class of game); add a universal gameplay trait/plugin ABI now (rejected: no evidence for its shape); make TypeScript/Babylon own arena physics (rejected: breaks native/Wasm parity and replay).
 
-**Evidence:** Engine-track capability audit, local arena replay/hash fixtures, native authoritative-session proof, and external-consumer composition check.
+**Evidence (implemented):** Engine-track capability audit (issue #28), deterministic arena replay/hash fixtures, the native arena match with replay reproduction (`tessera-cli arena play`), the Wasm adapter with pinned native-parity hash, the authoritative `ArenaSession` boundary, and the outside-workspace consumer composition check (M23).
 
 **Reversibility:** The engine track is additive. If the arena fails to justify a reusable seam, retain the v0.1 runtime and keep the consumer-specific systems outside the framework.
 
@@ -144,7 +144,7 @@ Tessera keeps decisions recorded with their context, alternatives, and reversibi
 
 **Alternatives:** Use platform floats as authority (rejected: parity and replay risk); adopt a third-party physics engine immediately (rejected: scope and determinism are not yet proven); implement arbitrary mesh collision (rejected: unnecessary for the first vertical slice).
 
-**Evidence:** Geometry property tests, collision golden vectors, overflow fixtures, native/Wasm parity, long-run replays, and the M20 arena workload.
+**Evidence (implemented):** geometry/golden tests in `rust/crates/tessera-arena` (fixed-point exactness, sqrt, disc contact), narrow-pair collision determinism, replay-plus-hash parity, native/Wasm byte parity via the pinned parity hash, the CLI's replay-verified arena match, and the outside-workspace consumer probe (M23).
 
 **Reversibility:** The fixed-point unit and protocol are versioned. A measured replacement would require a new protocol/schema version and a replay migration; no silent change is allowed.
 
