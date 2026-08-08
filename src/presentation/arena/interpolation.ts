@@ -61,12 +61,8 @@ function interpolateSnapshotPair(
   for (const body of next.bodies) {
     const earlier = previousById.get(body.id);
     const pose: InterpolatedPose = {
-      xMicros: earlier
-        ? lerpMicros(earlier.xMicros, body.xMicros, alpha)
-        : body.xMicros,
-      zMicros: earlier
-        ? lerpMicros(earlier.zMicros, body.zMicros, alpha)
-        : body.zMicros,
+      xMicros: earlier ? lerpMicros(earlier.xMicros, body.xMicros, alpha) : body.xMicros,
+      zMicros: earlier ? lerpMicros(earlier.zMicros, body.zMicros, alpha) : body.zMicros,
       alpha: earlier ? alpha : 1,
     };
     poses.push(pose);

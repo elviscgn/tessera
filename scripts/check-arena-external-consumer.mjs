@@ -14,8 +14,7 @@ const checkRoot = mkdtempSync(join(tmpdir(), 'tessera-arena-consumer-'));
 const fail = (message) => {
   throw new Error(`arena external consumer check failed: ${message}`);
 };
-const run = (command, args, cwd) =>
-  execFileSync(command, args, { cwd, stdio: 'inherit' });
+const run = (command, args, cwd) => execFileSync(command, args, { cwd, stdio: 'inherit' });
 
 try {
   const consumerRoot = join(checkRoot, 'consumer');

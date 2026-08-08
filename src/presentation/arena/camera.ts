@@ -60,7 +60,10 @@ export class ArenaCamera {
   }
 
   public withZoom(factor: number): ArenaCamera {
-    return new ArenaCamera({ ...this.settings, pixelsPerMillimetre: this.settings.pixelsPerMillimetre * factor });
+    return new ArenaCamera({
+      ...this.settings,
+      pixelsPerMillimetre: this.settings.pixelsPerMillimetre * factor,
+    });
   }
 
   public withPan(deltaX: number, deltaY: number): ArenaCamera {

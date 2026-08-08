@@ -60,7 +60,10 @@ describe('arena interpolation', () => {
   });
 
   it('samples the window between adjacent snapshots', () => {
-    const interp = new ArenaInterpolator([snapshot(1n, [body(1, 0, 0, true)]), snapshot(2n, [body(1, 100, 0, true)])]);
+    const interp = new ArenaInterpolator([
+      snapshot(1n, [body(1, 0, 0, true)]),
+      snapshot(2n, [body(1, 100, 0, true)]),
+    ]);
     const atHalf = interp.sample(1n, 0.5);
     expect(atHalf[0]).toMatchObject({ xMicros: 50 });
     const atStart = interp.sample(1n, 0);

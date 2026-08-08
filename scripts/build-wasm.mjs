@@ -120,7 +120,8 @@ const byteResultHelper = `function readU8Result(ret) {
 // String-returning bindings repeat the same deferred-free pattern three
 // times in the generated glue. Collapsing them into one helper keeps the
 // checked-in module's structure a single copy of each block.
-const stringResultBlock = /        let deferred1_0;\n        let deferred1_1;\n        try \{\n            const ret = wasm\.([a-z0-9_]+)\(this\.__wbg_ptr\);\n            deferred1_0 = ret\[0\];\n            deferred1_1 = ret\[1\];\n            return getStringFromWasm0\(ret\[0\], ret\[1\]\);\n        \} finally \{\n            wasm\.__wbindgen_free\(deferred1_0, deferred1_1, 1\);\n        \}/g;
+const stringResultBlock =
+  /        let deferred1_0;\n        let deferred1_1;\n        try \{\n            const ret = wasm\.([a-z0-9_]+)\(this\.__wbg_ptr\);\n            deferred1_0 = ret\[0\];\n            deferred1_1 = ret\[1\];\n            return getStringFromWasm0\(ret\[0\], ret\[1\]\);\n        \} finally \{\n            wasm\.__wbindgen_free\(deferred1_0, deferred1_1, 1\);\n        \}/g;
 const stringResultHelper = `function readStringResult(ptr, methodName) {
     let deferred1_0;
     let deferred1_1;
@@ -138,11 +139,11 @@ const stringResultHelper = `function readStringResult(ptr, methodName) {
 const normalizedSource = generatedSource
   .replaceAll(repeatedByteResult, '        return readU8Result(ret);')
   .replaceAll(repeatedByteResultV2, '        return readU8Result(ret);')
-  .replaceAll(
-    stringResultBlock,
-    '        return readStringResult(this.__wbg_ptr, \'$1\');',
-  )
-  .replace('function __wbg_get_imports()', `${byteResultHelper}${stringResultHelper}function __wbg_get_imports()`);
+  .replaceAll(stringResultBlock, "        return readStringResult(this.__wbg_ptr, '$1');")
+  .replace(
+    'function __wbg_get_imports()',
+    `${byteResultHelper}${stringResultHelper}function __wbg_get_imports()`,
+  );
 writeFileSync(
   generatedModule,
   normalizedSource.replace(

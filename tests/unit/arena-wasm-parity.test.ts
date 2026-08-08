@@ -6,8 +6,7 @@ import { ArenaSession } from '../../src/worker/arena-session';
 
 // Pinned from `cargo run -p tessera-arena --example arena_probe`:
 // two placements, one tick, then StartTurn + Aim(600) + Release and 3 ticks.
-const PROBE_HASH =
-  '9d9fbb9fd3a81349eafd57bc8ff966bf82cc900efa180e5b50587a8b6ead02c3';
+const PROBE_HASH = '9d9fbb9fd3a81349eafd57bc8ff966bf82cc900efa180e5b50587a8b6ead02c3';
 
 const placement = () =>
   encodeArenaBatch([

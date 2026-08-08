@@ -4,7 +4,7 @@ import { encodeArenaBatch } from '../../src/worker/arena-encoding';
 
 /** Scripted core: records calls and returns canned authoritative data. */
 class FakeCore implements ArenaSessionCore {
-    public submitted: Uint8Array[] = [];
+  public submitted: Uint8Array[] = [];
   public advancedTicks = 0n;
   public phaseValue = 0;
   public possessionValue = 0;
@@ -60,13 +60,19 @@ describe('arena session', () => {
     const core = new FakeCore();
     const session = new ArenaSession(core, { id: 's1' });
     session.apply([
-      { kind: 'place', payload: { body: 1, radiusMicros: 37_000, xMicros: 0, zMicros: 0, side: 0, ball: true } },
+      {
+        kind: 'place',
+        payload: { body: 1, radiusMicros: 37_000, xMicros: 0, zMicros: 0, side: 0, ball: true },
+      },
     ]);
     session.apply([{ kind: 'release', payload: {} }]);
     expect(core.submitted).toHaveLength(2);
     expect(core.submitted[0]).toEqual(
       encodeArenaBatch([
-        { kind: 'place', payload: { body: 1, radiusMicros: 37_000, xMicros: 0, zMicros: 0, side: 0, ball: true } },
+        {
+          kind: 'place',
+          payload: { body: 1, radiusMicros: 37_000, xMicros: 0, zMicros: 0, side: 0, ball: true },
+        },
       ]),
     );
     expect(session.record().appliedCommands).toBe(2);
@@ -78,7 +84,7 @@ describe('arena session', () => {
     const session = new ArenaSession(core, { id: 's2', maxTicksPerTick: 2n });
     session.stepTicks(5n);
     expect(core.advancedTicks).toBe(5n);
-const events = session.resolveCurrentLeg();
+    const events = session.resolveCurrentLeg();
     expect(core.advancedTicks).toBeGreaterThan(5);
     expect(session.drainPresentationEvents()).toContainEqual({ kind: 'release' });
     expect(events).toContainEqual({ kind: 'release' });

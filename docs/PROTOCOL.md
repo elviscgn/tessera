@@ -197,15 +197,15 @@ The v0.1 protocol remains valid for grid-first consumers. A continuous-arena con
 
 The engine-track binary command encoding `encode_arena_command`/`decode_arena_command` in `rust/crates/tessera-arena` is mirrored byte-for-byte by `src/worker/arena-encoding.ts`. Each command starts with a discriminant byte; fixed-point fields are little-endian signed 64-bit raw values (micrometres scaled by 1024) followed by fixed-size payloads:
 
-| Discriminant | Command        | Payload                                                     |
-| ------------ | -------------- | ----------------------------------------------------------- |
-| 1            | place          | body `u32`, radius `i64`, x `i64`, z `i64`, side `u8`, ball `u8` |
-| 2            | move           | body `u32`, x `i64`, z `i64`                               |
-| 3            | remove         | body `u32`                                                 |
-| 4            | startTurn      | side `u8`                                                  |
-| 5            | aim            | direction-x `i64`, direction-z `i64`, power-milli `u16`     |
-| 6            | release        | —                                                          |
-| 7            | power          | side `u8`, handle `u32`                                    |
+| Discriminant | Command   | Payload                                                          |
+| ------------ | --------- | ---------------------------------------------------------------- |
+| 1            | place     | body `u32`, radius `i64`, x `i64`, z `i64`, side `u8`, ball `u8` |
+| 2            | move      | body `u32`, x `i64`, z `i64`                                     |
+| 3            | remove    | body `u32`                                                       |
+| 4            | startTurn | side `u8`                                                        |
+| 5            | aim       | direction-x `i64`, direction-z `i64`, power-milli `u16`          |
+| 6            | release   | —                                                                |
+| 7            | power     | side `u8`, handle `u32`                                          |
 
 The native encoding is the same encoding that feeds the canonical state hash (versioned `TESSERA_ARENA_STATE` bytes hashed with BLAKE3), so a Wasm session and a native engine produce identical hashes for identical command sequences — verified by the pinned parity hash in `tests/unit/arena-wasm-parity.test.ts`.
 
