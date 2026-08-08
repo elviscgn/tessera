@@ -35,8 +35,6 @@ try {
   run('cargo', ['test', '--offline', '--manifest-path', manifestPath], checkRoot);
 
   console.log(`Arena external consumer passed outside the workspace (${checkRoot}).`);
-} catch (error) {
-  throw error;
 } finally {
   rmSync(checkRoot, { recursive: true, force: true });
 }

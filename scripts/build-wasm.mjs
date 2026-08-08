@@ -121,7 +121,7 @@ const byteResultHelper = `function readU8Result(ret) {
 // times in the generated glue. Collapsing them into one helper keeps the
 // checked-in module's structure a single copy of each block.
 const stringResultBlock =
-  /        let deferred1_0;\n        let deferred1_1;\n        try \{\n            const ret = wasm\.([a-z0-9_]+)\(this\.__wbg_ptr\);\n            deferred1_0 = ret\[0\];\n            deferred1_1 = ret\[1\];\n            return getStringFromWasm0\(ret\[0\], ret\[1\]\);\n        \} finally \{\n            wasm\.__wbindgen_free\(deferred1_0, deferred1_1, 1\);\n        \}/g;
+  / {8}let deferred1_0;\n {8}let deferred1_1;\n {8}try \{\n {12}const ret = wasm\.([a-z0-9_]+)\(this\.__wbg_ptr\);\n {12}deferred1_0 = ret\[0\];\n {12}deferred1_1 = ret\[1\];\n {12}return getStringFromWasm0\(ret\[0\], ret\[1\]\);\n {8}\} finally \{\n {12}wasm\.__wbindgen_free\(deferred1_0, deferred1_1, 1\);\n {8}\}/g;
 const stringResultHelper = `function readStringResult(ptr, methodName) {
     let deferred1_0;
     let deferred1_1;

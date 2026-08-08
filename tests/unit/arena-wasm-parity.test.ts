@@ -53,7 +53,9 @@ describe('arena Wasm adapter', () => {
       expect(arena.score()).toEqual(new Uint32Array([0, 0]));
       expect(arena.is_complete()).toBe(false);
 
-      const snapshot = JSON.parse(arena.state_snapshot());
+      const snapshot = JSON.parse(arena.state_snapshot()) as {
+        bodies: readonly { id: number; ball: boolean }[];
+      };
       expect(snapshot.bodies).toHaveLength(2);
       expect(snapshot.bodies[0]).toMatchObject({ id: 1, ball: true });
     } finally {
@@ -79,7 +81,10 @@ describe('arena Wasm adapter', () => {
         ]),
       );
       arena.advance_one_tick();
-      const events = JSON.parse(arena.drain_events());
+      const events = JSON.parse(arena.drain_events()) as readonly {
+        kind: string;
+        reason?: string;
+      }[];
       expect(events.at(-1)).toMatchObject({ kind: 'rejected', reason: 'UnknownBody' });
 
       // Legal: an out-of-bounds guard query agrees with the engine.
