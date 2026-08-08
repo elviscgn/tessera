@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { initSync, ArenaWasm } from '../../src/worker/wasm/tessera_wasm.js';
 import { encodeArenaBatch } from '../../src/worker/arena-encoding';
+import { ArenaSession } from '../../src/worker/arena-session';
 
 // Pinned from `cargo run -p tessera-arena --example arena_probe`:
 // two placements, one tick, then StartTurn + Aim(600) + Release and 3 ticks.
@@ -86,6 +87,52 @@ describe('arena Wasm adapter', () => {
       expect(arena.validate_placement(45_000n, 5_000_000n, 0n)).toBe(false);
     } finally {
       arena.dispose();
+    }
+  });
+
+  it('drives an authoritative session end-to-end and resolves a leg', () => {
+    initSync({
+      module: readFileSync(new URL('../../src/worker/wasm/tessera_wasm_bg.wasm', import.meta.url)),
+    });
+    const session = new ArenaSession(new ArenaWasm(5), { id: 'e2e-session' });
+    try {
+      session.apply([
+        {
+          kind: 'place',
+          payload: { body: 1, radiusMicros: 37_000, xMicros: 0, zMicros: 0, side: 0, ball: true },
+        },
+        {
+          kind: 'place',
+          payload: {
+            body: 2,
+            radiusMicros: 45_000,
+            xMicros: -100_000,
+            zMicros: 200_000,
+            side: 0,
+            ball: false,
+          },
+        },
+      ]);
+      session.step();
+      session.apply([
+        { kind: 'startTurn', payload: { side: 0 } },
+        { kind: 'aim', payload: { directionXMicros: 1, directionZMicros: 0, powerMilli: 600 } },
+        { kind: 'release', payload: {} },
+      ]);
+      session.stepTicks(3n);
+      expect(session.hash()).toBe(PROBE_HASH);
+
+      const snapshot = session.snapshot();
+      expect(snapshot.bodies).toHaveLength(2);
+      expect(snapshot.phase).toBe('Releasing');
+      expect(snapshot.score).toEqual([0, 0]);
+
+      const events = session.resolveCurrentLeg();
+      expect(events).toContainEqual({ kind: 'release' });
+      expect(snapshot.tick).toBe(4n);
+      expect(session.record()).toMatchObject({ sessionId: 'e2e-session', appliedCommands: 5 });
+    } finally {
+      session.dispose();
     }
   });
 });

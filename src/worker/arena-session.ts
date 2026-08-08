@@ -11,18 +11,19 @@ import {
 import type { ArenaSnapshot } from '../presentation/arena/interpolation';
 
 /** The deterministic core the session drives (implemented by ArenaWasm). */
+/** The real engine core the session is an observer of (implemented by ArenaWasm). */
 export interface ArenaSessionCore {
-  submitCommandBatch(bytes: Uint8Array): void;
-  advanceOneTick(): void;
-  advanceTicks(count: bigint): void;
-  stateHashHex(): string;
+  submit_command_batch(bytes: Uint8Array): void;
+  advance_one_tick(): void;
+  advance_ticks(count: bigint): void;
+  state_hash_hex(): string;
   tick(): bigint;
   phase(): number;
   possession(): number;
   score(): Uint32Array;
-  isComplete(): boolean;
-  stateSnapshot(): string;
-  drainEvents(): string;
+  is_complete(): boolean;
+  state_snapshot(): string;
+  drain_events(): string;
   dispose(): void;
 }
 
@@ -69,13 +70,13 @@ export class ArenaSession {
 
   /** Encodes and submits a batch of arena commands. */
   public apply(commands: readonly ArenaCommand[]): void {
-    this.core.submitCommandBatch(encodeArenaBatch(commands));
+    this.core.submit_command_batch(encodeArenaBatch(commands));
     this.appliedCommands += commands.length;
   }
 
   /** Advances one fixed tick of the authoritative core. */
   public step(): void {
-    this.core.advanceOneTick();
+    this.core.advance_one_tick();
   }
 
   /** Advances `count` fixed ticks. */
@@ -85,20 +86,20 @@ export class ArenaSession {
       throw new Error('arena session: negative step');
     }
     while (count > bound) {
-      this.core.advanceTicks(bound);
+      this.core.advance_ticks(bound);
       count -= bound;
     }
-    this.core.advanceTicks(count);
+    this.core.advance_ticks(count);
   }
 
   /** Advances until the current leg resolves (bounded). */
   public resolveCurrentLeg(): ArenaPresentationEvent[] {
     let guard = 0n;
-    while (!this.core.isComplete() && this.core.phase() !== 3) {
+    while (!this.core.is_complete() && this.core.phase() !== 3) {
       if (guard >= (this.options.maxLegTicks ?? MAX_LEG_TICKS)) {
         break;
       }
-      this.core.advanceOneTick();
+      this.core.advance_one_tick();
       guard += 1n;
     }
     return this.drainPresentationEvents();
@@ -106,19 +107,19 @@ export class ArenaSession {
 
   /** Current authoritative snapshot as presentation data. */
   public snapshot(): ArenaSnapshot {
-    return parseSnapshot(this.core.stateSnapshot());
+    return parseSnapshot(this.core.state_snapshot());
   }
 
   /** Current canonical hash. */
   public hash(): string {
-    return this.core.stateHashHex();
+    return this.core.state_hash_hex();
   }
 
   /** Drains and presents the event log. */
   public drainPresentationEvents(): ArenaPresentationEvent[] {
-    const records = JSON.parse(this.core.drainEvents()) as ArenaEventRecord[];
+    const records = JSON.parse(this.core.drain_events()) as ArenaEventRecord[];
     const score = this.core.score();
-    return presentArenaEvents(records, [score[0], score[1]], this.core.isComplete());
+    return presentArenaEvents(records, [score[0], score[1]], this.core.is_complete());
   }
 
   /** Stable machine-readable identity for the current session. */

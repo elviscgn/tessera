@@ -17,16 +17,16 @@ class FakeCore implements ArenaSessionCore {
   public eventsJson = '[{"kind":"released"}]';
   public disposed = false;
 
-  submitCommandBatch(bytes: Uint8Array): void {
+  submit_command_batch(bytes: Uint8Array): void {
     this.submitted.push(bytes);
   }
-  advanceOneTick(): void {
+  advance_one_tick(): void {
     this.advancedTicks += 1n;
   }
-  advanceTicks(count: bigint): void {
+  advance_ticks(count: bigint): void {
     this.advancedTicks += count;
   }
-  stateHashHex(): string {
+  state_hash_hex(): string {
     return this.hash;
   }
   tick(): bigint {
@@ -41,13 +41,13 @@ class FakeCore implements ArenaSessionCore {
   score(): Uint32Array {
     return this.scoreValue;
   }
-  isComplete(): boolean {
+  is_complete(): boolean {
     return this.complete;
   }
-  stateSnapshot(): string {
+  state_snapshot(): string {
     return this.snapshotJson;
   }
-  drainEvents(): string {
+  drain_events(): string {
     return this.eventsJson;
   }
   dispose(): void {
