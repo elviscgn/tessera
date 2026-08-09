@@ -16,8 +16,8 @@ import {
   validateReproductionManifest,
 } from '../../src/public/testkit';
 import type { FoundationDiagnostics } from '../../src/browser/foundation-runtime';
-import type { RenderEntityRecord } from '../../src/worker/data-protocol';
-import type { BoundaryMetrics, CommandResultResponse } from '../../src/worker/bridge-protocol';
+import type { RenderEntityRecord } from '../../src/worker/protocol-types';
+import type { BoundaryMetrics, CommandResultResponse } from '../../src/worker/protocol-types';
 import type {
   AnnotatedEntity,
   AnnotatedOverlayCapture,
@@ -103,7 +103,6 @@ const bridgeRuntime = (): FoundationRuntime => {
     batchSequence: 1,
     tick: 1,
     stateHashHex: 'ab'.repeat(32),
-    response: new ArrayBuffer(64),
     metrics: {} as BoundaryMetrics,
   };
   return {

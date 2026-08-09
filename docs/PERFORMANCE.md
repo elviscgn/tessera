@@ -58,12 +58,10 @@ WebGPU remain deferred until that evidence exists.
   encoding, and load validation.
 - Continuous arena bodies, deterministic substeps, collision contact counts,
   turn-resolution latency, and replay seek once the engine track begins.
-- Browser entity population, exact tick batches, save/load, transferable
-  render metrics, snapshot drops, memory-view generations, and render-buffer
-  pool pressure.
+- Browser entity population, exact tick batches, save/load, render and event
+  JSON boundary metrics, and authoritative snapshot volume.
 - Renderer and lifecycle state after repeated reset cycles: visible entities,
-  stale mappings, stale snapshots, event synchronisation, and in-flight
-  transferable buffers.
+  stale mappings, stale snapshots, and event synchronisation.
 - Runner metadata needed to interpret a trend: operating system, architecture,
   browser revision, graphics renderer, viewport, device pixel ratio, locale,
   timezone, seed, scenario, and workload counts.

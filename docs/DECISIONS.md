@@ -60,7 +60,7 @@ Tessera keeps decisions recorded with their context, alternatives, and reversibi
 
 **Alternatives:** JSON per frame (rejected: hot-path cost); per-entity Wasm calls (rejected: boundary granularity); `SharedArrayBuffer` first (rejected: requires COOP/COEP).
 
-**Evidence:** Protocol crate tests, boundary laboratory metrics, transfer-pool tests, event-continuity tests.
+**Evidence:** Protocol crate tests, boundary laboratory metrics, event-continuity tests.
 
 **Reversibility:** Protocol version 2 would be required for layout changes; the transport can add shared-memory later behind the same protocol.
 

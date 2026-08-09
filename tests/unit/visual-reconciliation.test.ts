@@ -3,7 +3,7 @@ import {
   reconcileVisualMappings,
   type VisualReconciliationState,
 } from '../../src/renderer/visual-reconciliation';
-import type { RenderEntityRecord } from '../../src/worker/data-protocol';
+import type { RenderEntityRecord } from '../../src/worker/protocol-types';
 
 const entity = (
   slot: number,

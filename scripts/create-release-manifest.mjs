@@ -14,7 +14,7 @@ const packageJson = JSON.parse(readFileSync(join(repositoryRoot, 'package.json')
 const artifactManifest = JSON.parse(
   readFileSync(join(repositoryRoot, 'examples/external-consumer/artifact-manifest.json'), 'utf8'),
 );
-const protocolSource = readFileSync(join(repositoryRoot, 'src/worker/bridge-protocol.ts'), 'utf8');
+const protocolSource = readFileSync(join(repositoryRoot, 'src/worker/protocol-types.ts'), 'utf8');
 const protocolVersion = Number(protocolSource.match(/PROTOCOL_VERSION\s*=\s*(\d+)/u)?.[1]);
 const artifactName = basename(artifactPath);
 const expectedName = `tessera-runtime-${packageJson.version}.tgz`;
@@ -26,7 +26,7 @@ if (tagArgument !== `v${packageJson.version}`) {
   throw new Error(`tag ${tagArgument} does not match package version ${packageJson.version}`);
 }
 if (!Number.isInteger(protocolVersion)) {
-  throw new Error('protocol version is missing from bridge-protocol.ts');
+  throw new Error('protocol version is missing from protocol-types.ts');
 }
 
 const checksum = createHash('sha256').update(readFileSync(artifactPath)).digest('hex');

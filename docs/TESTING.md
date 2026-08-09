@@ -46,23 +46,21 @@ The engine-track arena suite is implemented in `rust/crates/tessera-arena`: fixe
 
 ## Wasm and Worker boundary
 
-The Wasm adapter uses the same command batch as the native probe and compares checkpoint hashes. TypeScript tests cover command encoding, response decoding, structured errors, packed render/event validation, buffer ownership, and memory-view recreation after `WebAssembly.Memory.grow()`.
+The Wasm adapter uses the same command batch as the native probe and compares checkpoint hashes. TypeScript tests cover the semantic JSON surface, command encoding, response decoding, structured errors, and packed render/event validation in the Rust crate.
 
 The Worker checks that:
 
 - the web-target Wasm module is initialized explicitly;
 - at most the configured number of exact ticks runs in one call;
 - malformed data is rejected before rendering or mutation;
-- render buffers are copied into owned transferable storage;
-- pool exhaustion drops only visual snapshots;
+- authoritative frames cross the boundary as validated JSON from Rust;
 - event acknowledgements never skip a sequence;
-- a changed Wasm memory buffer recreates all host views;
 - save and load requests use defensive transferable ownership, and a failed load does not change the active tick or state hash;
 - a successful load resets event acknowledgement and publishes a new world-generation snapshot.
 
 ## Browser checks
 
-The Scenario Lab is the first browser smoke target. It checks the canvas, Babylon scene, orthographic camera, named pan/zoom/rotation actions, screen-to-grid readout, render loop, Worker readiness, packed snapshot delivery, event acknowledgement, memory-generation diagnostics, entity picking, selected-ID display, screen-space bounds, Rust-backed placement previews, placement/removal controls, and disposal on `pagehide`.
+The Scenario Lab is the first browser smoke target. It checks the canvas, Babylon scene, orthographic camera, named pan/zoom/rotation actions, screen-to-grid readout, render loop, Worker readiness, JSON snapshot delivery, event acknowledgement, entity picking, selected-ID display, screen-space bounds, Rust-backed placement previews, placement/removal controls, and disposal on `pagehide`.
 
 Its nine deterministic laboratories are exposed as labelled panels: camera and coordinates, placement, entity rendering stress, simulation stress, Worker/Wasm boundary metrics, save/load, the visual museum, structured errors, and lifecycle resets. Each panel uses the same public runtime commands and development testkit waits as a consumer-facing integration would use; none keeps an authoritative entity or occupancy cache.
 
