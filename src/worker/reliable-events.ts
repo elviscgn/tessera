@@ -1,4 +1,4 @@
-import type { EventBatchMetadata } from './data-protocol';
+import type { EventBatchMetadata } from './protocol-types';
 
 export interface EventStreamMetrics {
   readonly highestContiguousSequence: bigint;

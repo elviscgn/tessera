@@ -18,7 +18,7 @@ import type {
   RenderEntityRecord,
   RenderGridCell,
   RenderSnapshotMetadata,
-} from '../worker/data-protocol';
+} from '../worker/protocol-types';
 import { CameraProjection, type CameraViewport, type GridCoordinate } from './isometric-camera';
 import type { PlacementPreview } from '../public/runtime-types';
 import {

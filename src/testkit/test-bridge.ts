@@ -5,7 +5,7 @@ import type {
   FoundationRuntime,
 } from '../browser/foundation-runtime';
 import { viewportForCanvas } from '../browser/canvas-viewport';
-import type { BoundaryMetrics, CommandResultResponse } from '../worker/bridge-protocol';
+import type { BoundaryMetrics, CommandResultResponse } from '../worker/protocol-types';
 import type { CameraState, GridCoordinate } from '../renderer/isometric-camera';
 import type { EntityId, ScreenBounds, ScreenPoint } from '../renderer/entity-selection';
 import type {
