@@ -1,38 +1,35 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { initSync, ArenaWasm } from '../../src/worker/wasm/tessera_wasm.js';
-import { encodeArenaBatch } from '../../src/worker/arena-encoding';
 import { ArenaSession } from '../../src/worker/arena-session';
 
 // Pinned from `cargo run -p tessera-arena --example arena_probe`:
 // two placements, one tick, then StartTurn + Aim(600) + Release and 3 ticks.
 const PROBE_HASH = '9d9fbb9fd3a81349eafd57bc8ff966bf82cc900efa180e5b50587a8b6ead02c3';
 
-const placement = () =>
-  encodeArenaBatch([
-    {
-      kind: 'place',
-      payload: { body: 1, radiusMicros: 37_000, xMicros: 0, zMicros: 0, side: 0, ball: true },
+const placement = () => [
+  {
+    kind: 'place',
+    payload: { body: 1, radiusMicros: 37_000, xMicros: 0, zMicros: 0, side: 0, ball: true },
+  },
+  {
+    kind: 'place',
+    payload: {
+      body: 2,
+      radiusMicros: 45_000,
+      xMicros: -100_000,
+      zMicros: 200_000,
+      side: 0,
+      ball: false,
     },
-    {
-      kind: 'place',
-      payload: {
-        body: 2,
-        radiusMicros: 45_000,
-        xMicros: -100_000,
-        zMicros: 200_000,
-        side: 0,
-        ball: false,
-      },
-    },
-  ]);
+  },
+];
 
-const shot = () =>
-  encodeArenaBatch([
-    { kind: 'startTurn', payload: { side: 0 } },
-    { kind: 'aim', payload: { directionXMicros: 1, directionZMicros: 0, powerMilli: 600 } },
-    { kind: 'release', payload: {} },
-  ]);
+const shot = () => [
+  { kind: 'startTurn', payload: { side: 0 } },
+  { kind: 'aim', payload: { directionXMicros: 1, directionZMicros: 0, powerMilli: 600 } },
+  { kind: 'release', payload: {} },
+];
 
 describe('arena Wasm adapter', () => {
   it('matches the native probe checkpoint through the binary boundary', () => {
@@ -41,9 +38,9 @@ describe('arena Wasm adapter', () => {
     });
     const arena = new ArenaWasm(5);
     try {
-      arena.submit_command_batch(placement());
+      arena.submit_commands_json(JSON.stringify(placement()));
       arena.advance_one_tick();
-      arena.submit_command_batch(shot());
+      arena.submit_commands_json(JSON.stringify(shot()));
       arena.advance_ticks(3n);
       expect(arena.state_hash_hex()).toBe(PROBE_HASH);
 
@@ -69,11 +66,11 @@ describe('arena Wasm adapter', () => {
     });
     const arena = new ArenaWasm(5);
     try {
-      arena.submit_command_batch(placement());
+      arena.submit_commands_json(JSON.stringify(placement()));
       arena.advance_one_tick();
       // Illegal: a second ball.
-      arena.submit_command_batch(
-        encodeArenaBatch([
+      arena.submit_commands_json(
+        JSON.stringify([
           {
             kind: 'place',
             payload: { body: 9, radiusMicros: 37_000, xMicros: 0, zMicros: 0, side: 1, ball: true },
@@ -102,7 +99,7 @@ describe('arena Wasm adapter', () => {
     const arena = ArenaWasm.new_with_layout(2_300, 1_200, 30, 110, 2);
     try {
       expect(arena.is_complete()).toBe(false);
-      arena.submit_command_batch(placement());
+      arena.submit_commands_json(JSON.stringify(placement()));
       arena.advance_one_tick();
       const hash = arena.state_hash_hex();
       expect(hash).toMatch(/^[0-9a-f]{64}$/);
@@ -110,6 +107,45 @@ describe('arena Wasm adapter', () => {
       expect(arena.is_complete()).toBe(false);
     } finally {
       arena.dispose();
+    }
+  });
+
+  it('keeps the binary boundary identical to the semantic JSON path', () => {
+    initSync({
+      module: readFileSync(new URL('../../src/worker/wasm/tessera_wasm_bg.wasm', import.meta.url)),
+    });
+    // place { body: 1, radiusMicros: 37_000, x: 0, z: 0, side: 0, ball: false } encoded
+    // exactly as `encode_arena_command` in rust/crates/tessera-arena does:
+    // [1, body u32le, radius i64le, x i64le, z i64le, side, ball].
+    const bytes = new Uint8Array([
+      1, 1, 0, 0, 0, 0x88, 0x90, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0,
+    ]);
+    const binary = new ArenaWasm(5);
+    const semantic = new ArenaWasm(5);
+    try {
+      binary.submit_command_batch(bytes);
+      semantic.submit_commands_json(
+        JSON.stringify([
+          {
+            kind: 'place',
+            payload: {
+              body: 1,
+              radiusMicros: 37_000,
+              xMicros: 0,
+              zMicros: 0,
+              side: 0,
+              ball: false,
+            },
+          },
+        ]),
+      );
+      binary.advance_one_tick();
+      semantic.advance_one_tick();
+      expect(semantic.state_hash_hex()).toBe(binary.state_hash_hex());
+    } finally {
+      binary.dispose();
+      semantic.dispose();
     }
   });
 

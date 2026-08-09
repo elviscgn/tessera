@@ -15,6 +15,7 @@ export const arenawasm_score: (a: number) => [number, number];
 export const arenawasm_state_hash_hex: (a: number) => [number, number];
 export const arenawasm_state_snapshot: (a: number) => [number, number];
 export const arenawasm_submit_command_batch: (a: number, b: number, c: number) => [number, number, number, number];
+export const arenawasm_submit_commands_json: (a: number, b: number, c: number) => [number, number, number, number];
 export const arenawasm_tick: (a: number) => bigint;
 export const arenawasm_validate_placement: (a: number, b: bigint, c: bigint, d: bigint) => number;
 export const __wbg_tesserawasm_free: (a: number, b: number) => void;

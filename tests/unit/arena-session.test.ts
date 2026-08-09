@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ArenaSession, type ArenaSessionCore } from '../../src/worker/arena-session';
-import { encodeArenaBatch } from '../../src/worker/arena-encoding';
+import type { ArenaCommand } from '../../src/worker/arena-command';
 
 /** Scripted core: records calls and returns canned authoritative data. */
 class FakeCore implements ArenaSessionCore {
-  public submitted: Uint8Array[] = [];
+  public submitted: string[] = [];
   public advancedTicks = 0n;
   public phaseValue = 0;
   public possessionValue = 0;
@@ -17,8 +17,8 @@ class FakeCore implements ArenaSessionCore {
   public eventsJson = '[{"kind":"released"}]';
   public disposed = false;
 
-  submit_command_batch(bytes: Uint8Array): void {
-    this.submitted.push(bytes);
+  submit_commands_json(json: string): void {
+    this.submitted.push(json);
   }
   advance_one_tick(): void {
     this.advancedTicks += 1n;
@@ -59,22 +59,17 @@ describe('arena session', () => {
   it('applies batches through the semantic command stream', () => {
     const core = new FakeCore();
     const session = new ArenaSession(core, { id: 's1' });
-    session.apply([
+    const placement = [
       {
         kind: 'place',
         payload: { body: 1, radiusMicros: 37_000, xMicros: 0, zMicros: 0, side: 0, ball: true },
       },
-    ]);
+    ] satisfies readonly ArenaCommand[];
+    session.apply(placement);
     session.apply([{ kind: 'release', payload: {} }]);
     expect(core.submitted).toHaveLength(2);
-    expect(core.submitted[0]).toEqual(
-      encodeArenaBatch([
-        {
-          kind: 'place',
-          payload: { body: 1, radiusMicros: 37_000, xMicros: 0, zMicros: 0, side: 0, ball: true },
-        },
-      ]),
-    );
+    expect(core.submitted[0]).toBe(JSON.stringify(placement));
+    expect(JSON.parse(core.submitted[1] ?? '')).toEqual([{ kind: 'release', payload: {} }]);
     expect(session.record().appliedCommands).toBe(2);
   });
 
