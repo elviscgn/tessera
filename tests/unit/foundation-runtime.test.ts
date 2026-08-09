@@ -6,11 +6,12 @@ import {
 } from '../../src/browser/foundation-runtime';
 import { MemoryPersistenceAdapter } from '../../src/public/index';
 import type { RendererDiagnostics } from '../../src/renderer/babylon-renderer';
+import type { RenderSnapshotMetadata } from '../../src/worker/protocol-types';
 import type {
   BoundaryMetrics,
   WorkerRequest,
   WorkerResponse,
-} from '../../src/worker/bridge-protocol';
+} from '../../src/worker/protocol-types';
 
 const metrics = (): BoundaryMetrics => ({
   commandCalls: 0,
@@ -22,58 +23,42 @@ const metrics = (): BoundaryMetrics => ({
   eventResyncCount: 0,
   renderSnapshots: 0,
   renderBytes: 0,
-  droppedRenderSnapshots: 0,
-  inFlightRenderBuffers: 0,
-  renderBufferPoolSize: 3,
-  renderBufferHighWaterMark: 0,
-  memoryGeneration: 1,
-  memoryBufferBytes: 65536,
-  viewRecreations: 1,
   saveCalls: 0,
   saveBytes: 0,
   loadCalls: 0,
   loadBytes: 0,
 });
 
-const packedEmptySnapshot = (): ArrayBuffer => {
-  const bytes = new Uint8Array(352);
-  const view = new DataView(bytes.buffer);
-  bytes.set([84, 83, 82, 78, 68, 48, 48, 49], 0);
-  view.setUint16(8, 1, true);
-  view.setUint16(10, 64, true);
-  view.setUint32(16, bytes.byteLength, true);
-  view.setUint32(20, 1, true);
-  view.setBigUint64(24, 1n, true);
-  view.setBigUint64(32, 1n, true);
-  view.setUint32(40, 0, true);
-  view.setUint32(44, 0, true);
-  view.setUint32(48, 1, true);
-  view.setUint16(52, 9, true);
-  view.setUint16(54, 32, true);
-  view.setUint32(56, 64, true);
-  const regionLayouts: ReadonlyArray<readonly [number, number, number]> = [
-    [1, 3, 1],
-    [2, 3, 1],
-    [3, 4, 3],
-    [4, 5, 4],
-    [5, 5, 3],
-    [6, 3, 1],
-    [7, 3, 1],
-    [8, 2, 1],
-    [9, 2, 1],
-  ];
-  for (const [index, [kind, scalarType, componentCount]] of regionLayouts.entries()) {
-    const offset = 64 + index * 32;
-    view.setUint16(offset, kind, true);
-    view.setUint8(offset + 2, scalarType);
-    view.setUint8(offset + 3, componentCount);
-    view.setUint32(offset + 8, 352, true);
-    view.setUint32(offset + 12, 0, true);
-    view.setUint32(offset + 16, 0, true);
-    view.setUint32(offset + 20, 0, true);
-  }
-  return bytes.buffer;
-};
+const renderSnapshot = (
+  options: {
+    snapshotGeneration?: bigint;
+    simulationTick?: bigint;
+    entityCount?: number;
+    memoryGeneration?: number;
+  } = {},
+): RenderSnapshotMetadata => ({
+  totalByteLength: 64,
+  worldGeneration: 1,
+  snapshotGeneration: options.snapshotGeneration ?? 1n,
+  simulationTick: options.simulationTick ?? 1n,
+  entityCount: options.entityCount ?? 0,
+  entityCapacity: 0,
+  memoryGeneration: options.memoryGeneration ?? 1,
+  regions: [
+    {
+      kind: 9,
+      scalarType: 2,
+      componentCount: 1,
+      flags: 0,
+      offset: 0,
+      elementCount: 0,
+      byteLength: 0,
+      capacity: 0,
+    },
+  ],
+});
+
+const commandJson = (payload: object): string => JSON.stringify(payload);
 
 class FakeRenderer implements FoundationRenderer {
   public starts = 0;
@@ -191,7 +176,7 @@ const latestPlacementRequest = (
 };
 
 describe('foundation runtime lifecycle', () => {
-  it('owns readiness, Worker synchronization, snapshot returns, and idempotent disposal', async () => {
+  it('owns readiness, Worker synchronization, snapshot delivery, and idempotent disposal', async () => {
     const worker = new FakeWorker();
     const renderer = new FakeRenderer();
     const runtime = createFoundationRuntime({
@@ -204,7 +189,7 @@ describe('foundation runtime lifecycle', () => {
     expect(worker.messages[0]?.message.type).toBe('initialize');
     expect(runtime.waitForReady()).toBe(runtime.ready);
     expect(runtime.selectedEntity()).toBeUndefined();
-    await expect(runtime.submitCommand(new ArrayBuffer(0), 0)).rejects.toThrow('not_ready');
+    await expect(runtime.submitCommand('{}', 0)).rejects.toThrow('not_ready');
     const simulationWait = runtime.waitForSimulationTick(1);
     const renderWait = runtime.waitForRenderedTick(1);
     const generationWait = runtime.waitForRenderGeneration(1);
@@ -221,38 +206,34 @@ describe('foundation runtime lifecycle', () => {
     await expect(runtime.ready).resolves.toMatchObject({ tick: 0, protocolVersion: 1 });
     await expect(noErrorWait).resolves.toMatchObject({ state: 'ready' });
 
-    const commandPromise = runtime.submitCommand(new Uint8Array([1, 2, 3]), 1);
+    const commandPromise = runtime.submitCommand(commandJson({ batchSequence: 1 }), 1);
     const commandMessage = worker.messages.at(-1)?.message;
     expect(commandMessage?.type).toBe('command');
     if (commandMessage?.type !== 'command') {
       throw new Error('expected a command request');
     }
+    expect(commandMessage.commands).toBe(commandJson({ batchSequence: 1 }));
     worker.emit({
       type: 'command-result',
       requestId: commandMessage.requestId,
       batchSequence: 1,
       tick: 1,
       stateHashHex: 'ab'.repeat(32),
-      response: new ArrayBuffer(64),
       metrics: metrics(),
     });
     await expect(commandPromise).resolves.toMatchObject({ tick: 1, stateHashHex: 'ab'.repeat(32) });
     await expect(simulationWait).resolves.toMatchObject({ simulationTick: 1n });
 
-    const snapshotBuffer = packedEmptySnapshot();
     worker.emit({
       type: 'render-snapshot',
-      bufferId: 0,
-      snapshotGeneration: 1n,
-      simulationTick: 1n,
-      byteLength: snapshotBuffer.byteLength,
-      buffer: snapshotBuffer,
+      snapshot: renderSnapshot(),
+      entities: [],
+      occupiedCells: [],
       metrics: metrics(),
     });
     await expect(renderWait).resolves.toMatchObject({ lastRenderTick: 1n });
     await expect(generationWait).resolves.toMatchObject({ lastSnapshotGeneration: 1n });
     expect(renderer.consumed).toBe(1);
-    expect(worker.messages.at(-1)?.message.type).toBe('return-render-buffer');
     expect(runtime.diagnostics()).toMatchObject({
       state: 'ready',
       simulationTick: 1n,
@@ -267,7 +248,7 @@ describe('foundation runtime lifecycle', () => {
       throw new Error('expected a metrics request');
     }
     worker.emit({ type: 'metrics', requestId: metricRequest.requestId, metrics: metrics() });
-    await expect(metricPromise).resolves.toMatchObject({ memoryGeneration: 1 });
+    await expect(metricPromise).resolves.toMatchObject({ renderSnapshots: 0 });
 
     runtime.dispose();
     runtime.dispose();
@@ -502,14 +483,21 @@ describe('foundation runtime lifecycle', () => {
       rotation: 0,
     });
     const placementRequest = latestCommandRequest(worker);
-    expect(new DataView(placementRequest.bytes).getUint16(28, true)).toBe(1);
+    expect(JSON.parse(placementRequest.commands)).toMatchObject({
+      batchSequence: 1,
+      commands: [
+        {
+          kind: 'spawn',
+          payload: { objectType: 1, x: 2, z: -1, rotation: 0 },
+        },
+      ],
+    });
     worker.emit({
       type: 'command-result',
       requestId: placementRequest.requestId,
       batchSequence: 1,
       tick: 1,
       stateHashHex: 'cd'.repeat(32),
-      response: new ArrayBuffer(64),
       metrics: metrics(),
     });
     await placementCommand;
@@ -521,28 +509,37 @@ describe('foundation runtime lifecycle', () => {
       rotation: 1,
     });
     const moveRequest = latestCommandRequest(worker);
-    expect(new DataView(moveRequest.bytes).getUint16(28, true)).toBe(3);
+    expect(JSON.parse(moveRequest.commands)).toMatchObject({
+      batchSequence: 2,
+      commands: [
+        {
+          kind: 'move',
+          payload: { slot: 0, generation: 1, x: 3, rotation: 1 },
+        },
+      ],
+    });
     worker.emit({
       type: 'command-result',
       requestId: moveRequest.requestId,
       batchSequence: 2,
       tick: 2,
       stateHashHex: 'de'.repeat(32),
-      response: new ArrayBuffer(64),
       metrics: metrics(),
     });
     await moveCommand;
 
     const removalCommand = runtime.removeEntity('0:1');
     const removalRequest = latestCommandRequest(worker);
-    expect(new DataView(removalRequest.bytes).getUint16(28, true)).toBe(4);
+    expect(JSON.parse(removalRequest.commands)).toMatchObject({
+      batchSequence: 3,
+      commands: [{ kind: 'remove', payload: { slot: 0, generation: 1 } }],
+    });
     worker.emit({
       type: 'command-result',
       requestId: removalRequest.requestId,
       batchSequence: 3,
       tick: 3,
       stateHashHex: 'ef'.repeat(32),
-      response: new ArrayBuffer(64),
       metrics: metrics(),
     });
     await removalCommand;

@@ -212,14 +212,28 @@ export class TesseraWasm {
         wasm.tesserawasm_dispose(this.__wbg_ptr);
     }
     /**
-     * Returns ordered event records after the requested sequence.
+     * Returns ordered event records after the requested sequence as JSON metadata.
      * @param {bigint} after_sequence
      * @param {number} max_events
-     * @returns {Uint8Array}
+     * @returns {string}
      */
-    event_batch(after_sequence, max_events) {
-        const ret = wasm.tesserawasm_event_batch(this.__wbg_ptr, after_sequence, max_events);
-        return readU8Result(ret);
+    event_batch_json(after_sequence, max_events) {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.tesserawasm_event_batch_json(this.__wbg_ptr, after_sequence, max_events);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
     }
     /**
      * Returns the highest event sequence currently retained by the simulation.
@@ -292,25 +306,54 @@ export class TesseraWasm {
         return ret[0] >>> 0;
     }
     /**
-     * Builds the latest packed snapshot and returns a descriptor into Wasm memory.
-     * @returns {Uint8Array}
+     * Builds a fresh packed snapshot into the double buffer and returns the
+     * decoded, validated host form as JSON.
+     * @returns {string}
      */
-    render_snapshot_descriptor() {
-        const ret = wasm.tesserawasm_render_snapshot_descriptor(this.__wbg_ptr);
-        return readU8Result(ret);
+    render_snapshot_json() {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.tesserawasm_render_snapshot_json(this.__wbg_ptr);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
     }
     /**
-     * Decodes one binary command batch, schedules it, advances bounded exact ticks, and
-     * returns a fixed-size binary response containing the canonical state hash.
-     * @param {Uint8Array} command_batch
+     * Decodes one semantic JSON command batch, schedules it, advances bounded
+     * exact ticks, and returns the validated response as JSON.
+     * @param {string} json
      * @param {number} exact_ticks
-     * @returns {Uint8Array}
+     * @returns {string}
      */
-    run_command_batch(command_batch, exact_ticks) {
-        const ptr0 = passArray8ToWasm0(command_batch, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.tesserawasm_run_command_batch(this.__wbg_ptr, ptr0, len0, exact_ticks);
-        return readU8Result(ret);
+    run_command_batch_json(json, exact_ticks) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.tesserawasm_run_command_batch_json(this.__wbg_ptr, ptr0, len0, exact_ticks);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
     }
     /**
      * Serializes the current authoritative state without mutating it.
@@ -354,17 +397,29 @@ export class TesseraWasm {
         return BigInt.asUintN(64, ret);
     }
     /**
-     * Queries authoritative occupancy for a prospective placement without mutation.
-     * @param {number} object_type
-     * @param {number} x
-     * @param {number} z
-     * @param {number} elevation_mm
-     * @param {number} rotation
-     * @returns {Uint8Array}
+     * Queries authoritative occupancy for a prospective JSON placement.
+     * @param {string} json
+     * @returns {string}
      */
-    validate_placement(object_type, x, z, elevation_mm, rotation) {
-        const ret = wasm.tesserawasm_validate_placement(this.__wbg_ptr, object_type, x, z, elevation_mm, rotation);
-        return readU8Result(ret);
+    validate_placement_json(json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.tesserawasm_validate_placement_json(this.__wbg_ptr, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
     }
     /**
      * Returns the current reset/world generation.

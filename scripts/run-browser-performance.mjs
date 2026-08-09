@@ -146,7 +146,6 @@ const runWorkload = async (page, workload) =>
     if (bridge === undefined) {
       throw new Error('window.tesseraTest is unavailable in the development performance run');
     }
-    let memoryBufferHighWater = 0;
     const numberOrZero = (value) => (typeof value === 'number' ? value : 0);
     const rendererFor = (renderer) => ({
       visibleEntityCount: numberOrZero(renderer.visibleEntityCount),
@@ -157,7 +156,6 @@ const runWorkload = async (page, workload) =>
     });
     const snapshot = async () => {
       const metrics = await bridge.requestMetrics();
-      memoryBufferHighWater = Math.max(memoryBufferHighWater, metrics.memoryBufferBytes);
       const diagnostics = bridge.diagnostics();
       return {
         state: diagnostics.state,
@@ -169,16 +167,6 @@ const runWorkload = async (page, workload) =>
         renderer: rendererFor(diagnostics.renderer),
         metrics,
       };
-    };
-    const waitForBuffers = async () => {
-      for (let attempt = 0; attempt < 120; attempt += 1) {
-        const metrics = await bridge.requestMetrics();
-        if (metrics.inFlightRenderBuffers === 0) {
-          return metrics;
-        }
-        await new Promise((resolvePromise) => setTimeout(resolvePromise, 0));
-      }
-      throw new Error('render buffers did not return to the pool');
     };
     const populate = async () => {
       for (let index = 0; index < configuration.entities; index += 1) {
@@ -228,8 +216,6 @@ const runWorkload = async (page, workload) =>
     const cleanupStart = performance.now();
     await resetCycles();
     const cleanupMs = performance.now() - cleanupStart;
-    const cleanupMetrics = await waitForBuffers();
-    memoryBufferHighWater = Math.max(memoryBufferHighWater, cleanupMetrics.memoryBufferBytes);
     const cleanupState = await snapshot();
 
     return {
@@ -241,11 +227,9 @@ const runWorkload = async (page, workload) =>
       totalMs: performance.now() - totalStart,
       ticksPerSecond: configuration.ticks / Math.max(tickMs / 1_000, Number.EPSILON),
       saveBytes: bytes.byteLength,
-      memoryBufferHighWater,
       population,
       tickState,
       cleanup: cleanupState,
-      cleanupMetrics,
     };
   }, workload);
 
@@ -255,7 +239,6 @@ const structuralGates = (samples) => {
       sample.cleanup.renderer.staleMappingCount === 0 &&
       sample.cleanup.renderer.staleSnapshotCount === 0,
     noEventDesync: sample.cleanup.eventDesynced === false,
-    buffersReturned: sample.cleanupMetrics.inFlightRenderBuffers === 0,
     resetClearsEntities: sample.cleanup.renderer.visibleEntityCount === 0,
     metricsRecorded: sample.population.metrics.renderSnapshots > 0,
   }));
@@ -315,7 +298,7 @@ const buildReport = (browser, environment, options, samples) => {
     notes: [
       'Timings are observations for trend comparison, not release budgets.',
       'Chromium runs use a fixed viewport, DPR, locale, timezone, and launch flags.',
-      'Cleanup gates cover stale mappings, event synchronisation, transferable ownership, and reset clearing.',
+      'Cleanup gates cover stale mappings, event synchronisation, and reset clearing.',
     ],
   };
 };

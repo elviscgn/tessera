@@ -33,8 +33,7 @@ const readSource = (relativePath) => {
 const packageJson = readJson('package.json');
 const artifactManifest = readJson('examples/external-consumer/artifact-manifest.json');
 const consumerPackage = readJson('examples/external-consumer/package.json');
-const bridgeProtocol = readSource('src/worker/bridge-protocol.ts');
-const dataProtocol = readSource('src/worker/data-protocol.ts');
+const bridgeProtocol = readSource('src/worker/protocol-types.ts');
 const rustProtocol = readSource('rust/crates/tessera-protocol/src/lib.rs');
 const releaseWorkflow = readSource('.github/workflows/release.yml');
 
@@ -66,22 +65,19 @@ const frameworkVersionPattern = new RegExp(
 );
 if (!frameworkVersionPattern.test(bridgeProtocol)) {
   fail(
-    `bridge-protocol.ts SAVE_FRAMEWORK_VERSION does not match package version ${frameworkVersion}`,
+    `protocol-types.ts SAVE_FRAMEWORK_VERSION does not match package version ${frameworkVersion}`,
   );
 }
 
 const protocolVersionPattern = /(?:export )?const PROTOCOL_VERSION\s*=\s*(\d+)/;
 const rustMatch = rustProtocol.match(/pub const PROTOCOL_VERSION: u16 = (\d+);/);
-const bridgeMatch = bridgeProtocol.match(protocolVersionPattern);
-const dataMatch = dataProtocol.match(protocolVersionPattern);
-if (!rustMatch || !bridgeMatch || !dataMatch) {
+const protocolMatch = bridgeProtocol.match(protocolVersionPattern);
+if (!rustMatch || !protocolMatch) {
   fail('protocol version constant is missing from Rust or TypeScript');
 }
-const versions = new Set([rustMatch[1], bridgeMatch[1], dataMatch[1]]);
+const versions = new Set([rustMatch[1], protocolMatch[1]]);
 if (versions.size !== 1) {
-  fail(
-    `protocol version drift: Rust ${rustMatch[1]}, bridge ${bridgeMatch[1]}, data ${dataMatch[1]}`,
-  );
+  fail(`protocol version drift: Rust ${rustMatch[1]}, protocol-types ${protocolMatch[1]}`);
 }
 
 const requiredDocs = [

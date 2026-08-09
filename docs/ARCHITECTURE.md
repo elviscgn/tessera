@@ -26,7 +26,7 @@ flowchart TB
   host -->|commands and controls| worker
   worker -->|Wasm adapter| core
   core -->|events and snapshots| worker
-  worker -->|transferable buffers| host
+  worker -->|validated JSON| host
   host --> renderer
   core -. shared formats .- protocol
   cli -. uses .- core
@@ -42,7 +42,7 @@ flowchart TB
 | Browser host      | Canvas, input, public lifecycle, persistence adapters, and derived presentation state                 |
 | Babylon renderer  | Scene and visual resources; a disposable projection of Rust state                                     |
 
-The browser main thread communicates with the Worker through versioned transferable buffers. The renderer receives complete snapshots and never writes into Rust memory.
+The browser main thread communicates with the Worker through versioned requests and validated JSON responses. The renderer receives complete decoded snapshots and never writes into Rust memory.
 
 Babylon.js is deliberately disposable. It can be stopped and rebuilt from a complete render snapshot without changing a tick, command result, event sequence, or state hash.
 
@@ -93,17 +93,13 @@ The Wasm adapter (`ArenaWasm`) owns one authoritative instance per session; comm
 
 The Worker explicitly initializes the `wasm-pack --target web` module, creates one Rust instance, and keeps the browser clock separate from tick semantics. Normal real-time work is bounded; excessive wall-clock debt is discarded and reported instead of being converted into an unbounded catch-up.
 
-Small control messages are versioned requests and responses. Larger traffic uses packed little-endian buffers:
+Commands cross the boundary as semantic JSON that the Wasm adapter encodes through the single binary codec in Rust. Every adapter response returns as validated JSON decoded from that same codec:
 
-- command batches contain a magic value, protocol version, batch sequence, record count, total length, and TLV records;
+- command batches contain a batch sequence and ordered commands (spawn, move, remove) with client sequences;
 - event batches contain fixed-size records and contiguous sequence metadata; the main thread acknowledges only the highest contiguous event;
-- render snapshots contain a fixed header and a region table followed by structure-of-arrays data.
+- render snapshots contain a fixed header and a region table followed by structure-of-arrays data, served as decoded metadata, entities, and occupied cells.
 
-Unknown required fields, unsupported flags, malformed lengths, and overlapping regions are rejected before allocation, rendering, or mutation. The event stream is reliable and may request retransmission. Render snapshots are latest-wins and may be dropped under pressure; dropping one never drops a command, tick, or authoritative event.
-
-Wasm memory growth invalidates existing JavaScript views. The Worker compares the memory buffer identity and length on every descriptor read, recreates its views when either changes, increments a memory generation, and copies a complete snapshot into an exclusively owned transferable buffer.
-
-The initial render pool has three reusable buffers with power-of-two capacities. The main thread returns a buffer after it is no longer in use. If all buffers are in flight, the Worker records backpressure and skips visual publication while simulation continues.
+Unknown required fields, unsupported flags, malformed lengths, and overlapping regions are rejected inside Rust before allocation, rendering, or mutation. The event stream is reliable and may request retransmission. Render snapshots are latest-wins and may be dropped under pressure; dropping one never drops a command, tick, or authoritative event.
 
 ## Persistence and replay
 
@@ -148,14 +144,14 @@ Milestones 3 through 11 provide the lifecycle, camera, occupancy, selection, pla
 
 - `FoundationRuntime` owns one Worker, one renderer, listeners, pending requests, readiness, diagnostics, selection subscriptions, deterministic waits, and disposal;
 - `BabylonRenderer` creates a WebGL2 engine, right-handed scene, camera, light, the foundation overlays, and slot/generation-keyed entity visuals;
-- packed event and render messages are validated before the renderer sees them;
+- packed event and render messages are validated inside Rust before the renderer sees them;
 - fatal startup, protocol, Worker, and renderer errors close the runtime and reject pending work;
 - `dispose()` is idempotent, including the Scenario Lab `pagehide` path.
 - `CameraProjection` provides deterministic grid centres, floor-based cell lookup, four rotations, pan/zoom/focus, and ray-plane conversion;
 - the Babylon camera is orthographic and follows the projection model, while Scenario Lab exposes named camera actions and coordinate readouts.
 - `Footprint` and `OccupancyGrid` provide normalized integer placement cells, atomic claims/replacements/releases, and a canonical invariant check;
 - the render snapshot can carry an optional occupied-cell region, which the browser copies into a disposable grid and translucent cell overlay without making it authoritative.
-- render snapshots also carry validated transform, visual-type, and flag regions; the browser copies those records before returning the transferable buffer to the Worker.
+- render snapshots also carry validated transform, visual-type, and flag regions; the browser consumes those records directly from the decoded response.
 - entity snapshots reconcile by slot, generation, and visual type; ordinary instances are grouped under disposable visual templates and removed when absent from the newest snapshot;
 - world-generation resets clear the renderer projection atomically, while stale world/snapshot generations and stale slot mappings are visible in renderer diagnostics.
 - `renderInspection()` retains defensive copies of the latest validated snapshot, entity records, and occupied cells for the development test surface; loading or disposing the runtime clears that inspection state before a new generation is accepted.

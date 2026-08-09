@@ -179,11 +179,6 @@ const metricValue = <K extends keyof RuntimeMetrics>(
   key: K,
 ): RuntimeMetrics[K] | undefined => (metrics === undefined ? undefined : metrics[key]);
 
-const formatInFlightBuffers = (metrics: RuntimeMetrics | undefined): string =>
-  metrics === undefined
-    ? '—'
-    : `${metrics.inFlightRenderBuffers} / ${metrics.renderBufferPoolSize}`;
-
 const rendererCount = (value: number | undefined): number => (value === undefined ? 0 : value);
 
 const errorField = (error: FoundationDiagnostics['lastError'], field: 'code' | 'phase'): string =>
@@ -194,10 +189,9 @@ const setBoundaryMetricReadouts = (metrics: FoundationDiagnostics['metrics']): v
   text('#metricCommandCalls', formatCount(metricValue(typedMetrics, 'commandCalls')));
   text('#metricCommandBytes', formatBytes(metricValue(typedMetrics, 'commandBytes')));
   text('#metricRenderSnapshots', formatCount(metricValue(typedMetrics, 'renderSnapshots')));
-  text('#metricDroppedSnapshots', formatCount(metricValue(typedMetrics, 'droppedRenderSnapshots')));
-  text('#metricInFlightBuffers', formatInFlightBuffers(typedMetrics));
-  text('#metricMemoryGeneration', formatCount(metricValue(typedMetrics, 'memoryGeneration')));
-  text('#metricViewRecreations', formatCount(metricValue(typedMetrics, 'viewRecreations')));
+  text('#metricRenderBytes', formatBytes(metricValue(typedMetrics, 'renderBytes')));
+  text('#metricEventBatches', formatCount(metricValue(typedMetrics, 'eventBatches')));
+  text('#metricEventBytes', formatBytes(metricValue(typedMetrics, 'eventBytes')));
   text('#metricEventGaps', formatCount(metricValue(typedMetrics, 'eventGapCount')));
 };
 
@@ -467,7 +461,7 @@ try {
     setMetricSnapshot(metrics);
     result(
       '#boundaryResult',
-      `memory generation ${metrics.memoryGeneration} · ${metrics.viewRecreations} view recreations · ${metrics.droppedRenderSnapshots} visual snapshots dropped`,
+      `${formatCount(metrics.renderSnapshots)} render snapshots · ${formatBytes(metrics.renderBytes)} · ${formatCount(metrics.eventBatches)} event batches · ${formatBytes(metrics.eventBytes)}`,
       'info',
     );
   };
@@ -479,7 +473,7 @@ try {
     await refreshBoundary();
     result(
       '#boundaryResult',
-      'One exact tick completed; only the render projection may be skipped under backpressure.',
+      'One exact tick completed; all authoritative frames cross the boundary as JSON.',
       'positive',
     );
   };

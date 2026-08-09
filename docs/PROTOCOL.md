@@ -1,6 +1,6 @@
 # Protocol
 
-This page records the versioned wire contract between the browser, the Worker, and Rust. The authoritative definitions live in `rust/crates/tessera-protocol` and the matching validators in `src/worker`. Anything described here is a compatibility commitment: a change to a magic value, layout, code, or required field is a protocol version change and must follow the compatibility policy at the end of this page.
+This page records the versioned wire contract between the browser, the Worker, and Rust. The authoritative definitions live in `rust/crates/tessera-protocol`; `tessera-wasm` owns the only host-facing adapter, which accepts semantic JSON, encodes it through the same binary codec, and decodes every response before returning JSON to the browser. Nothing in the host mirrors the binary layout. A change to a magic value, layout, code, or required field is a protocol version change and must follow the compatibility policy at the end of this page.
 
 ## Version and identity
 
@@ -143,11 +143,15 @@ Region kinds:
 | 9    | animation phase                                       |
 | 10   | occupied grid cells `(x, z, elevationMm)` (`i32 × 3`) |
 
-Scalar types: `u8 = 1`, `u16 = 2`, `u32 = 3`, `i32 = 4`, `f32 = 5`. Float regions carry presentation vectors only and can never mutate Rust state. Snapshot regions are latest-wins projection data: the Worker may drop an intermediate snapshot under buffer pressure, but never a command, tick, or authoritative event.
+Scalar types: `u8 = 1`, `u16 = 2`, `u32 = 3`, `i32 = 4`, `f32 = 5`. Float regions carry presentation vectors only and can never mutate Rust state. Snapshot regions are latest-wins projection data: the host may ignore an intermediate snapshot, but never a command, tick, or authoritative event.
+
+## Boundary transport (browser ↔ Worker)
+
+The browser never encodes or decodes the binary layouts above. Command batches cross as semantic JSON (`{"batchSequence":N,"commands":[...]}` with `kind`/`payload` records for `spawn`, `move`, and `remove`); Rust parses that JSON, encodes it with `encode_command_batch`, runs the batch, and responds with `{"batchSequence":N,"tick":N,"stateHashHex":"…"}`. Placement queries use `{"objectType","x","z","elevationMm","rotation"}` and return `{"valid",…,"occupiedCellCount"}`. Render snapshots and reliable event batches cross as their fully decoded JSON forms (`render_snapshot_json`, `event_batch_json`), so the host consumes the same validated fields the binary format defines. A malformed JSON document is rejected with `tessera:<phase>:json:<reason>` before any state mutation.
 
 ## Render memory descriptor
 
-The Worker publishes a fixed 32-byte descriptor before the payload is read from Wasm memory:
+The Wasm adapter keeps a fixed 32-byte descriptor internally while it builds a fresh packed snapshot before encoding the JSON response. The browser never reads Wasm memory directly:
 
 | Offset | Length | Field                          |
 | ------ | ------ | ------------------------------ |
@@ -159,7 +163,7 @@ The Worker publishes a fixed 32-byte descriptor before the payload is read from 
 | 20     | 4      | capacity (`u32`)               |
 | 24     | 8      | snapshot generation (`u64`)    |
 
-Byte length must not exceed capacity. Wasm memory growth invalidates prior views, so the Worker compares the memory buffer identity and length on every descriptor read, recreates its views, and carries the resulting memory generation in the snapshot header.
+Byte length must not exceed capacity. The packed payload lives entirely inside the Wasm adapter; memory growth during the copy aborts the publication rather than exposing a detached view to the host.
 
 ## Reliable event batch
 

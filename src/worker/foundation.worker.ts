@@ -2,8 +2,6 @@ import { init, TesseraWasm } from './wasm/tessera_wasm.js';
 import {
   bytesToHex,
   DEFAULT_SCENARIO_ID,
-  decodeCommandResponse,
-  decodePlacementValidation,
   MAX_EXACT_TICKS_PER_CALL,
   parseWasmError,
   PROTOCOL_VERSION,
@@ -11,36 +9,30 @@ import {
   SAVE_GAME_ID,
   type BoundaryMetrics,
   type CommandRequest,
+  type EventBatchResponse,
   type InitializeRequest,
   type MetricsRequest,
+  type PlacementValidationResult,
   type RequestEventsRequest,
-  type ReturnRenderBufferRequest,
+  type RenderEntityRecord,
+  type RenderGridCell,
+  type RenderSnapshotMetadata,
+  type RenderSnapshotResponse,
   type WorkerRequest,
   type WorkerResponse,
-} from './bridge-protocol';
-import {
-  decodeEventBatch,
-  decodeRenderMemoryDescriptor,
-  decodeRenderSnapshot,
-  MAX_EVENT_RECORD_COUNT,
-  patchRenderMemoryGeneration,
-} from './data-protocol';
-import { TransferableBufferPool } from './transfer-pool';
-import { MemoryViewTracker } from './memory-views';
+} from './protocol-types';
+import { MAX_EVENT_RECORD_COUNT } from './protocol-types';
 
 /**
  * The dedicated Worker owns the Wasm instance and both data-plane streams.
- * Render snapshots are copied into owned transferable buffers; authoritative
- * events are retained in Rust and published with explicit sequence ACKs.
+ * Rust is the single authority for the wire format; the worker passes semantic
+ * JSON across the boundary and forwards decoded responses to the runtime.
  */
 
 const workerScope = self as DedicatedWorkerGlobalScope;
 let simulation: TesseraWasm | undefined;
-let wasmMemory: WebAssembly.Memory | undefined;
 let startupInProgress = false;
 let fatal = false;
-let bufferPool = new TransferableBufferPool(3);
-let memoryViews = new MemoryViewTracker();
 let commandCalls = 0;
 let commandBytes = 0;
 let eventBatches = 0;
@@ -73,31 +65,23 @@ const toSafeNumber = (value: bigint, label: string): number => {
 const metricNumber = (value: bigint): number =>
   value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(value);
 
-const metrics = (): BoundaryMetrics => {
-  const pool = bufferPool.metrics();
-  return {
-    commandCalls,
-    commandBytes,
-    eventBatches,
-    eventBytes,
-    highestAcknowledgedEvent: metricNumber(highestAcknowledgedEvent),
-    eventGapCount,
-    eventResyncCount,
-    renderSnapshots,
-    renderBytes,
-    droppedRenderSnapshots: pool.droppedSnapshots,
-    inFlightRenderBuffers: pool.inFlight,
-    renderBufferPoolSize: pool.capacity,
-    renderBufferHighWaterMark: pool.highWaterMark,
-    memoryGeneration: memoryViews.generation,
-    memoryBufferBytes: memoryViews.byteLength,
-    viewRecreations: memoryViews.recreations,
-    saveCalls,
-    saveBytes,
-    loadCalls,
-    loadBytes,
-  };
-};
+const utf8ByteLength = (text: string): number => new TextEncoder().encode(text).byteLength;
+
+const metrics = (): BoundaryMetrics => ({
+  commandCalls,
+  commandBytes,
+  eventBatches,
+  eventBytes,
+  highestAcknowledgedEvent: metricNumber(highestAcknowledgedEvent),
+  eventGapCount,
+  eventResyncCount,
+  renderSnapshots,
+  renderBytes,
+  saveCalls,
+  saveBytes,
+  loadCalls,
+  loadBytes,
+});
 
 const postError = (
   type: 'command-error' | 'fatal-error',
@@ -116,94 +100,96 @@ const postError = (
   });
 };
 
-const syncMemoryViews = (): ArrayBuffer => {
-  if (!wasmMemory) {
-    throw new Error('tessera:startup:memory_unavailable:Wasm memory is not initialized');
+const parseRenderSnapshotJson = (
+  json: string,
+  totalByteLength: number,
+): Omit<RenderSnapshotResponse, 'type' | 'metrics'> => {
+  const parsed: unknown = JSON.parse(json);
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('tessera:snapshot:invalid_json:render snapshot is not a JSON object');
   }
-  return memoryViews.sync(wasmMemory);
+  const snapshot = parsed as {
+    totalByteLength: number;
+    worldGeneration: number;
+    snapshotGeneration: number;
+    simulationTick: number;
+    entityCount: number;
+    entityCapacity: number;
+    memoryGeneration: number;
+    regions: unknown[];
+    entities: RenderEntityRecord[];
+    occupiedCells: RenderGridCell[];
+  };
+  if (snapshot.snapshotGeneration === undefined || snapshot.simulationTick === undefined) {
+    throw new Error('tessera:snapshot:invalid_json:render snapshot is missing generation fields');
+  }
+  if (snapshot.entityCount !== snapshot.entities.length) {
+    throw new Error('tessera:snapshot:invalid_json:render entity count does not match its records');
+  }
+  if (snapshot.regions.length === 0) {
+    throw new Error('tessera:snapshot:invalid_json:render snapshot has no regions');
+  }
+  return {
+    snapshot: {
+      totalByteLength,
+      worldGeneration: snapshot.worldGeneration,
+      snapshotGeneration: BigInt(snapshot.snapshotGeneration),
+      simulationTick: BigInt(snapshot.simulationTick),
+      entityCount: snapshot.entityCount,
+      entityCapacity: snapshot.entityCapacity,
+      memoryGeneration: snapshot.memoryGeneration,
+      regions: snapshot.regions as RenderSnapshotMetadata['regions'],
+    },
+    entities: snapshot.entities,
+    occupiedCells: snapshot.occupiedCells,
+  };
 };
 
-const publishRenderSnapshot = (attempt = 0): boolean => {
+const publishRenderSnapshot = (): boolean => {
   if (!simulation) {
     return false;
   }
-  const descriptorBytes = simulation.render_snapshot_descriptor();
-  const descriptor = decodeRenderMemoryDescriptor(descriptorBytes);
-  const sourceBuffer = syncMemoryViews();
-  const sourceEnd = descriptor.pointer + descriptor.byteLength;
-  const capacityEnd = descriptor.pointer + descriptor.capacity;
-  if (
-    !Number.isSafeInteger(sourceEnd) ||
-    !Number.isSafeInteger(capacityEnd) ||
-    sourceEnd > sourceBuffer.byteLength ||
-    capacityEnd > sourceBuffer.byteLength
-  ) {
-    throw new Error('tessera:snapshot:invalid_descriptor:Wasm snapshot exceeds memory');
-  }
-  const lease = bufferPool.acquire(descriptor.byteLength);
-  if (!lease) {
-    // A full pool is render-only backpressure. Keep simulation and event
-    // delivery moving; the next returned buffer will receive a fresh snapshot.
-    return false;
-  }
-  try {
-    const source = new Uint8Array(sourceBuffer, descriptor.pointer, descriptor.byteLength);
-    lease.view.set(source, 0);
-    patchRenderMemoryGeneration(lease.buffer, memoryViews.generation);
-    const snapshot = decodeRenderSnapshot(new Uint8Array(lease.buffer, 0, descriptor.byteLength));
-    const afterBuffer = syncMemoryViews();
-    if (afterBuffer !== sourceBuffer || afterBuffer.byteLength !== sourceBuffer.byteLength) {
-      if (attempt < 1) {
-        bufferPool.release(lease.id, lease.buffer);
-        return publishRenderSnapshot(attempt + 1);
-      }
-      throw new Error('tessera:fatal:memory_growth:Wasm memory changed during snapshot copy');
-    }
-    renderSnapshots += 1;
-    renderBytes += descriptor.byteLength;
-    post(
-      {
-        type: 'render-snapshot',
-        bufferId: lease.id,
-        snapshotGeneration: snapshot.snapshotGeneration,
-        simulationTick: snapshot.simulationTick,
-        byteLength: descriptor.byteLength,
-        buffer: lease.buffer,
-        metrics: metrics(),
-      },
-      [lease.buffer],
-    );
-    return true;
-  } catch (error: unknown) {
-    bufferPool.release(lease.id, lease.buffer);
-    throw error;
-  }
+  const json = simulation.render_snapshot_json();
+  const parsed = parseRenderSnapshotJson(json, utf8ByteLength(json));
+  renderSnapshots += 1;
+  renderBytes += utf8ByteLength(json);
+  post({
+    type: 'render-snapshot',
+    ...parsed,
+    metrics: metrics(),
+  });
+  return true;
 };
 
 const publishEvents = (afterSequence: bigint): void => {
   if (!simulation) {
     return;
   }
-  const bytes = simulation.event_batch(afterSequence, MAX_EVENT_RECORD_COUNT);
-  const metadata = decodeEventBatch(bytes);
-  if (metadata.recordCount === 0) {
+  const json = simulation.event_batch_json(afterSequence, MAX_EVENT_RECORD_COUNT);
+  const parsed: unknown = JSON.parse(json);
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('tessera:events:invalid_json:event batch is not a JSON object');
+  }
+  const batch = parsed as {
+    firstSequence: number;
+    lastSequence: number;
+    ackFloor: number;
+    recordCount: number;
+  };
+  if (batch.recordCount === 0) {
     return;
   }
-  const transfer = new Uint8Array(bytes).slice().buffer;
+  const response: EventBatchResponse = {
+    type: 'event-batch',
+    firstSequence: BigInt(batch.firstSequence),
+    lastSequence: BigInt(batch.lastSequence),
+    ackFloor: BigInt(batch.ackFloor),
+    recordCount: batch.recordCount,
+    metrics: metrics(),
+  };
   eventBatches += 1;
-  eventBytes += transfer.byteLength;
-  post(
-    {
-      type: 'event-batch',
-      firstSequence: metadata.firstSequence,
-      lastSequence: metadata.lastSequence,
-      ackFloor: metadata.ackFloor,
-      recordCount: metadata.recordCount,
-      bytes: transfer,
-      metrics: metrics(),
-    },
-    [transfer],
-  );
+  eventBytes += utf8ByteLength(json);
+  post(response);
 };
 
 const handleInitialize = async (request: InitializeRequest): Promise<void> => {
@@ -223,11 +209,7 @@ const handleInitialize = async (request: InitializeRequest): Promise<void> => {
     if (request.seed.byteLength !== 32) {
       throw new Error('tessera:startup:invalid_seed:seed must be 32 bytes');
     }
-    const wasm = await init();
-    wasmMemory = wasm.memory;
-    memoryViews = new MemoryViewTracker();
-    syncMemoryViews();
-    bufferPool = new TransferableBufferPool(3);
+    await init();
     simulation = new TesseraWasm(new Uint8Array(request.seed));
     scenarioId = initializedScenarioId(request);
     const objectTypeHandles: Array<{ readonly id: string; readonly handle: number }> = [];
@@ -349,20 +331,12 @@ const handleLoad = (request: Extract<WorkerRequest, { type: 'load' }>): void => 
 };
 
 const handleCommand = (request: CommandRequest): void => {
-  if (!simulation || fatal) {
-    postError(
-      'command-error',
-      'command',
-      fatal ? 'worker_fatal' : 'not_ready',
-      fatal
-        ? 'the Worker is in a fatal state and requires restart'
-        : 'the Worker has not completed startup',
-      request.requestId,
-    );
+  const sim = readySimulation(request.requestId);
+  if (!sim) {
     return;
   }
   commandCalls += 1;
-  commandBytes += request.bytes.byteLength;
+  commandBytes += utf8ByteLength(request.commands);
   if (
     !Number.isInteger(request.exactTicks) ||
     request.exactTicks < 0 ||
@@ -378,67 +352,73 @@ const handleCommand = (request: CommandRequest): void => {
     return;
   }
   try {
-    const responseBytes = simulation.run_command_batch(
-      new Uint8Array(request.bytes),
-      request.exactTicks,
-    );
-    const response = decodeCommandResponse(responseBytes);
-    const responseBuffer = responseBytes.slice().buffer;
-    post(
-      {
-        type: 'command-result',
-        requestId: request.requestId,
-        batchSequence: toSafeNumber(response.batchSequence, 'batch sequence'),
-        tick: toSafeNumber(response.tick, 'tick'),
-        stateHashHex: bytesToHex(response.stateHash),
-        response: responseBuffer,
-        metrics: metrics(),
-      },
-      [responseBuffer],
-    );
+    const responseJson = sim.run_command_batch_json(request.commands, request.exactTicks);
+    const parsed: unknown = JSON.parse(responseJson);
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error('tessera:command:invalid_json:command response is not a JSON object');
+    }
+    const response = parsed as { batchSequence: number; tick: number; stateHashHex: string };
+    post({
+      type: 'command-result',
+      requestId: request.requestId,
+      batchSequence: toSafeNumber(BigInt(response.batchSequence), 'batch sequence'),
+      tick: toSafeNumber(BigInt(response.tick), 'tick'),
+      stateHashHex: response.stateHashHex,
+      metrics: metrics(),
+    });
     publishEvents(highestAcknowledgedEvent);
     publishRenderSnapshot();
   } catch (error: unknown) {
-    const failure = parseWasmError(error);
-    if (failure.type === 'fatal-error') {
-      fatal = true;
-      simulation.free();
-      simulation = undefined;
-    }
-    postError(
-      failure.type,
-      failure.type === 'fatal-error' ? 'fatal' : 'command',
-      failure.code,
-      failure.message,
-      request.requestId,
-    );
+    reportFailure(error, 'command', request.requestId);
   }
+};
+
+const readySimulation = (requestId: number): TesseraWasm | undefined => {
+  if (simulation && !fatal) {
+    return simulation;
+  }
+  postError(
+    'command-error',
+    'command',
+    fatal ? 'worker_fatal' : 'not_ready',
+    fatal
+      ? 'the Worker is in a fatal state and requires restart'
+      : 'the Worker has not completed startup',
+    requestId,
+  );
+  return undefined;
+};
+
+const reportFailure = (error: unknown, phase: 'startup' | 'command', requestId?: number): void => {
+  const failure = parseWasmError(error);
+  if (failure.type === 'fatal-error') {
+    fatal = true;
+    simulation?.free();
+    simulation = undefined;
+  }
+  postError(
+    failure.type,
+    failure.type === 'fatal-error' ? 'fatal' : phase,
+    failure.code,
+    failure.message,
+    requestId,
+  );
 };
 
 const handlePlacementValidation = (
   request: Extract<WorkerRequest, { type: 'validate-placement' }>,
 ): void => {
-  if (!simulation || fatal) {
-    postError(
-      'command-error',
-      'command',
-      fatal ? 'worker_fatal' : 'not_ready',
-      fatal
-        ? 'the Worker is in a fatal state and requires restart'
-        : 'the Worker has not completed startup',
-      request.requestId,
-    );
+  const sim = readySimulation(request.requestId);
+  if (!sim) {
     return;
   }
   try {
-    const responseBytes = simulation.validate_placement(
-      request.input.objectType,
-      request.input.x,
-      request.input.z,
-      request.input.elevationMm,
-      request.input.rotation,
-    );
-    const result = decodePlacementValidation(responseBytes);
+    const responseJson = sim.validate_placement_json(JSON.stringify(request.input));
+    const parsed: unknown = JSON.parse(responseJson);
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error('tessera:placement:invalid_json:placement response is not a JSON object');
+    }
+    const result = parsed as PlacementValidationResult;
     post({
       type: 'placement-validation',
       requestId: request.requestId,
@@ -446,19 +426,7 @@ const handlePlacementValidation = (
       metrics: metrics(),
     });
   } catch (error: unknown) {
-    const failure = parseWasmError(error);
-    if (failure.type === 'fatal-error') {
-      fatal = true;
-      simulation.free();
-      simulation = undefined;
-    }
-    postError(
-      failure.type,
-      failure.type === 'fatal-error' ? 'fatal' : 'command',
-      failure.code,
-      failure.message,
-      request.requestId,
-    );
+    reportFailure(error, 'command', request.requestId);
   }
 };
 
@@ -501,19 +469,6 @@ const handleRequestEvents = (request: RequestEventsRequest): void => {
   }
 };
 
-const handleReturnRenderBuffer = (request: ReturnRenderBufferRequest): void => {
-  if (!bufferPool.release(request.bufferId, request.buffer)) {
-    postError(
-      'command-error',
-      'command',
-      'invalid_render_buffer',
-      'the returned render buffer does not belong to the in-flight pool',
-    );
-    return;
-  }
-  post({ type: 'metrics', requestId: 0, metrics: metrics() });
-};
-
 const handleMetrics = (request: MetricsRequest): void => {
   post({ type: 'metrics', requestId: request.requestId, metrics: metrics() });
 };
@@ -538,8 +493,6 @@ const requestHandlers = {
     handleAckEvents(request),
   'request-events': (request: Extract<WorkerRequest, { type: 'request-events' }>) =>
     handleRequestEvents(request),
-  'return-render-buffer': (request: Extract<WorkerRequest, { type: 'return-render-buffer' }>) =>
-    handleReturnRenderBuffer(request),
   metrics: (request: Extract<WorkerRequest, { type: 'metrics' }>) => handleMetrics(request),
   save: (request: Extract<WorkerRequest, { type: 'save' }>) => handleSave(request),
   load: (request: Extract<WorkerRequest, { type: 'load' }>) => handleLoad(request),

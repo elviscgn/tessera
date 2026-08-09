@@ -1,23 +1,22 @@
 import { BabylonRenderer, type RendererDiagnostics } from '../renderer/babylon-renderer';
 import {
-  decodeOccupiedCells,
-  decodeEventBatch,
-  decodeRenderEntities,
-  decodeRenderSnapshot,
-  type RenderEntityRecord,
-  type RenderGridCell,
-  type RenderSnapshotMetadata,
-} from '../worker/data-protocol';
-import {
+  encodeEmptyCommandJson,
+  encodeMoveCommandJson,
+  encodeRemoveCommandJson,
+  encodeSpawnCommandJson,
+  MAX_EXACT_TICKS_PER_CALL,
   type BoundaryMetrics,
   type CommandResultResponse,
   type LoadResultResponse,
   type PlacementValidationResponseMessage,
+  type RenderEntityRecord,
+  type RenderGridCell,
+  type RenderSnapshotMetadata,
   type SaveResultResponse,
   type WorkerObjectTypeDefinition,
   type WorkerRequest,
   type WorkerResponse,
-} from '../worker/bridge-protocol';
+} from '../worker/protocol-types';
 import { ReliableEventReceiver, type EventStreamMetrics } from '../worker/reliable-events';
 import { CameraProjection, type CameraProjectionOptions } from '../renderer/isometric-camera';
 import {
@@ -27,13 +26,6 @@ import {
   type ScreenBounds,
   type ScreenPoint,
 } from '../renderer/entity-selection';
-import {
-  encodeMoveCommandBatch,
-  encodeEmptyCommandBatch,
-  encodeRemoveCommandBatch,
-  encodeSpawnCommandBatch,
-  MAX_EXACT_TICKS_PER_CALL,
-} from '../worker/bridge-protocol';
 import type {
   AssetManifest,
   EntityTransformTarget,
@@ -579,7 +571,7 @@ export class FoundationRuntime {
     }
     const ids = this.allocateCommandIds();
     return this.submitCommand(
-      encodeSpawnCommandBatch({
+      encodeSpawnCommandJson({
         batchSequence: ids.batchSequence,
         clientSequence: ids.clientSequence,
         objectType,
@@ -604,7 +596,7 @@ export class FoundationRuntime {
       return Promise.reject(command);
     }
     return this.submitCommand(
-      encodeMoveCommandBatch({
+      encodeMoveCommandJson({
         batchSequence: command.ids.batchSequence,
         clientSequence: command.ids.clientSequence,
         slot: command.entity.slot,
@@ -625,7 +617,7 @@ export class FoundationRuntime {
       return Promise.reject(command);
     }
     return this.submitCommand(
-      encodeRemoveCommandBatch({
+      encodeRemoveCommandJson({
         batchSequence: command.ids.batchSequence,
         clientSequence: command.ids.clientSequence,
         slot: command.entity.slot,
@@ -635,14 +627,9 @@ export class FoundationRuntime {
     );
   }
 
-  public submitCommand(
-    bytes: ArrayBuffer | Uint8Array,
-    exactTicks: number,
-  ): Promise<CommandResultResponse> {
-    const payload = bytes instanceof Uint8Array ? bytes.slice().buffer : bytes.slice(0);
+  public submitCommand(commands: string, exactTicks: number): Promise<CommandResultResponse> {
     return this.postPending(this.pendingCommands, 'command', (requestId) => ({
-      message: { type: 'command', requestId, bytes: payload, exactTicks },
-      transfer: [payload],
+      message: { type: 'command', requestId, commands, exactTicks },
     }));
   }
 
@@ -659,7 +646,7 @@ export class FoundationRuntime {
         ),
       );
     }
-    return this.submitCommand(encodeEmptyCommandBatch(), exactTicks);
+    return this.submitCommand(encodeEmptyCommandJson(), exactTicks);
   }
 
   public requestMetrics(): Promise<BoundaryMetrics> {
@@ -865,16 +852,12 @@ export class FoundationRuntime {
 
   private handleEventBatch(response: Extract<WorkerResponse, { type: 'event-batch' }>): void {
     try {
-      const metadata = decodeEventBatch(response.bytes);
-      if (
-        metadata.firstSequence !== response.firstSequence ||
-        metadata.lastSequence !== response.lastSequence ||
-        metadata.recordCount !== response.recordCount ||
-        metadata.ackFloor !== response.ackFloor
-      ) {
-        throw new Error('event response metadata does not match its packed batch');
-      }
-      const result = this.eventReceiver.accept(metadata);
+      const result = this.eventReceiver.accept({
+        firstSequence: response.firstSequence,
+        lastSequence: response.lastSequence,
+        ackFloor: response.ackFloor,
+        recordCount: response.recordCount,
+      });
       this.latestMetrics = response.metrics;
       if (result.type === 'gap') {
         const afterSequence = this.eventReceiver.requestResync();
@@ -896,18 +879,9 @@ export class FoundationRuntime {
   ): void {
     let failure: Error | undefined;
     try {
-      const snapshot = decodeRenderSnapshot(
-        new Uint8Array(response.buffer, 0, response.byteLength),
-      );
-      if (
-        snapshot.snapshotGeneration !== response.snapshotGeneration ||
-        snapshot.simulationTick !== response.simulationTick
-      ) {
-        throw new Error('render response metadata does not match its packed snapshot');
-      }
-      const snapshotBytes = new Uint8Array(response.buffer, 0, response.byteLength);
-      const occupiedCells = decodeOccupiedCells(snapshotBytes, snapshot);
-      const entities = decodeRenderEntities(snapshotBytes, snapshot);
+      const snapshot = response.snapshot;
+      const occupiedCells = response.occupiedCells;
+      const entities = response.entities;
       const applied = this.renderer.consumeSnapshot(snapshot, occupiedCells, entities);
       this.latestMetrics = response.metrics;
       if (applied !== false) {
@@ -921,18 +895,9 @@ export class FoundationRuntime {
     } catch (error: unknown) {
       failure = asError(error);
     }
-    try {
-      this.worker.postMessage(
-        { type: 'return-render-buffer', bufferId: response.bufferId, buffer: response.buffer },
-        [response.buffer],
-      );
-    } catch (error: unknown) {
-      failure ??= asError(error);
-    }
+    this.notifyDiagnostics();
     if (failure) {
       this.transitionFatal('render_snapshot_invalid', failure.message, 'fatal');
-    } else {
-      this.notifyDiagnostics();
     }
   }
 

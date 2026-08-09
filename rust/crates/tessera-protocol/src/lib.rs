@@ -62,7 +62,7 @@ const EVENT_OPCODE_ENTITY_REMOVED: u16 = 5;
 
 /// Render regions are deliberately scalar and renderer-neutral.
 #[repr(u16)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum RenderRegionKind {
     /// Slot component of the generational entity ID.
     EntitySlot = 1,
@@ -86,6 +86,25 @@ pub enum RenderRegionKind {
     OccupiedCell = 10,
 }
 
+impl RenderRegionKind {
+    /// Converts a stable numeric code back into its region kind.
+    pub const fn from_bytes(value: u16) -> Option<Self> {
+        match value {
+            1 => Some(Self::EntitySlot),
+            2 => Some(Self::EntityGeneration),
+            3 => Some(Self::Position),
+            4 => Some(Self::RotationQuaternion),
+            5 => Some(Self::Scale),
+            6 => Some(Self::VisualType),
+            7 => Some(Self::RenderFlags),
+            8 => Some(Self::AnimationState),
+            9 => Some(Self::AnimationPhase),
+            10 => Some(Self::OccupiedCell),
+            _ => None,
+        }
+    }
+}
+
 /// Scalar encodings used by render regions.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -100,6 +119,20 @@ pub enum RenderScalarType {
     I32 = 4,
     /// IEEE-754 32-bit float used only for presentation vectors.
     F32 = 5,
+}
+
+impl RenderScalarType {
+    /// Converts a stable numeric code back into its scalar type.
+    pub const fn from_bytes(value: u8) -> Option<Self> {
+        match value {
+            1 => Some(Self::U8),
+            2 => Some(Self::U16),
+            3 => Some(Self::U32),
+            4 => Some(Self::I32),
+            5 => Some(Self::F32),
+            _ => None,
+        }
+    }
 }
 
 /// One fixed render region descriptor.
@@ -739,6 +772,428 @@ pub fn encode_render_descriptor(descriptor: RenderSnapshotDescriptor) -> Vec<u8>
     bytes
 }
 
+/// Decodes a fixed successful command response without host byte parsing.
+pub fn decode_command_response(bytes: &[u8]) -> Result<CommandResponse, ProtocolError> {
+    if bytes.len() != RESPONSE_LEN {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidPayload,
+            bytes.len(),
+        ));
+    }
+    if bytes[..8] != RESPONSE_MAGIC {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidMagic, 0));
+    }
+    if read_u16(bytes, 8)? != PROTOCOL_VERSION {
+        return Err(ProtocolError::new(ProtocolErrorCode::UnsupportedVersion, 8));
+    }
+    if read_u16(bytes, 10)? != 0 {
+        return Err(ProtocolError::new(ProtocolErrorCode::UnsupportedFlags, 10));
+    }
+    if read_u32(bytes, 60)? != RESPONSE_LEN as u32 {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidTotalLength,
+            60,
+        ));
+    }
+    let mut state_hash = [0_u8; 32];
+    state_hash.copy_from_slice(&bytes[28..60]);
+    Ok(CommandResponse {
+        batch_sequence: read_u64(bytes, 12)?,
+        tick: read_u64(bytes, 20)?,
+        state_hash,
+    })
+}
+
+/// One decoded entity transform row from a packed render snapshot.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenderEntityRecord {
+    /// Slot component of the generational entity ID.
+    pub slot: u32,
+    /// Generation component of the generational entity ID.
+    pub generation: u32,
+    /// Integer anchor position.
+    pub position: GridPosition,
+    /// Presentation quaternion `(x, y, z, w)`.
+    pub rotation: [f32; 4],
+    /// Presentation scale `(x, y, z)`.
+    pub scale: [f32; 3],
+    /// Consumer-defined visual type handle.
+    pub visual_type: u32,
+    /// Renderer flags.
+    pub render_flags: u32,
+}
+
+/// The complete validated content of a packed render snapshot.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenderSnapshotData {
+    /// Total encoded snapshot length.
+    pub total_byte_length: u32,
+    /// World generation captured when the snapshot was produced.
+    pub world_generation: u32,
+    /// Monotonic snapshot generation.
+    pub snapshot_generation: u64,
+    /// Authoritative simulation tick at snapshot time.
+    pub simulation_tick: u64,
+    /// Number of live entity rows.
+    pub entity_count: u32,
+    /// Number of entity rows the snapshot allocates for.
+    pub entity_capacity: u32,
+    /// Host memory generation stamped into the header.
+    pub memory_generation: u32,
+    /// Validated region descriptor table.
+    pub regions: Vec<RenderRegionDescriptor>,
+    /// Validated entity transform rows.
+    pub entities: Vec<RenderEntityRecord>,
+    /// Validated authoritative occupancy region.
+    pub occupied_cells: Vec<GridPosition>,
+}
+
+const fn scalar_width(scalar_type: RenderScalarType) -> Option<u8> {
+    match scalar_type {
+        RenderScalarType::U8 => Some(1),
+        RenderScalarType::U16 => Some(2),
+        RenderScalarType::U32 | RenderScalarType::I32 | RenderScalarType::F32 => Some(4),
+    }
+}
+
+fn read_render_region(
+    bytes: &[u8],
+    total_length: usize,
+    region_table_offset: usize,
+    region_table_end: usize,
+    descriptor_size: usize,
+    index: usize,
+    intervals: &mut Vec<(u32, u32)>,
+) -> Result<RenderRegionDescriptor, ProtocolError> {
+    let offset = region_table_offset + index * descriptor_size;
+    if total_length - offset < 24 {
+        return Err(ProtocolError::new(ProtocolErrorCode::Truncated, offset));
+    }
+    let kind = read_u16(bytes, offset)?;
+    let scalar_type_code = read_u8(bytes, offset + 2)?;
+    let scalar_type = RenderScalarType::from_bytes(scalar_type_code).ok_or(ProtocolError::new(
+        ProtocolErrorCode::InvalidRegion,
+        offset + 2,
+    ))?;
+    let component_count = read_u8(bytes, offset + 3)?;
+    if component_count == 0 {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidRegion,
+            offset + 3,
+        ));
+    }
+    let flags = read_u32(bytes, offset + 4)?;
+    let region_offset = read_u32(bytes, offset + 8)?;
+    let element_count = read_u32(bytes, offset + 12)?;
+    let byte_length = read_u32(bytes, offset + 16)?;
+    let capacity = read_u32(bytes, offset + 20)?;
+    let width = scalar_width(scalar_type).ok_or(ProtocolError::new(
+        ProtocolErrorCode::InvalidRegion,
+        offset + 2,
+    ))?;
+    let expected_length = u64::from(element_count)
+        .checked_mul(u64::from(component_count))
+        .and_then(|value| value.checked_mul(u64::from(width)))
+        .ok_or(ProtocolError::new(
+            ProtocolErrorCode::InvalidRegion,
+            offset + 16,
+        ))?;
+    if u64::from(byte_length) != expected_length {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidRegion,
+            offset + 16,
+        ));
+    }
+    if capacity < byte_length {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidRegion,
+            offset + 20,
+        ));
+    }
+    let region_end = usize::try_from(region_offset)
+        .ok()
+        .and_then(|start| start.checked_add(byte_length as usize))
+        .ok_or(ProtocolError::new(
+            ProtocolErrorCode::InvalidRegion,
+            offset + 8,
+        ))?;
+    let capacity_end = usize::try_from(region_offset)
+        .ok()
+        .and_then(|start| start.checked_add(capacity as usize))
+        .ok_or(ProtocolError::new(
+            ProtocolErrorCode::InvalidRegion,
+            offset + 8,
+        ))?;
+    if region_end > total_length || capacity_end > total_length {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidRegion,
+            offset + 8,
+        ));
+    }
+    if usize::try_from(region_offset)
+        .ok()
+        .is_none_or(|start| start < region_table_end)
+    {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidRegion,
+            offset + 8,
+        ));
+    }
+    if intervals
+        .iter()
+        .any(|(interval_start, interval_end): &(u32, u32)| {
+            region_offset < *interval_end
+                && u32::try_from(capacity_end).unwrap_or(u32::MAX) > *interval_start
+        })
+    {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidRegion,
+            offset + 8,
+        ));
+    }
+    intervals.push((
+        region_offset,
+        u32::try_from(capacity_end)
+            .map_err(|_| ProtocolError::new(ProtocolErrorCode::InvalidRegion, offset + 8))?,
+    ));
+    Ok(RenderRegionDescriptor {
+        kind: RenderRegionKind::from_bytes(kind)
+            .ok_or(ProtocolError::new(ProtocolErrorCode::InvalidRegion, offset))?,
+        scalar_type,
+        component_count,
+        flags,
+        offset: region_offset,
+        element_count,
+        byte_length,
+        capacity,
+    })
+}
+
+/// Decodes and validates a packed render snapshot into its complete host form.
+pub fn decode_render_snapshot(bytes: &[u8]) -> Result<RenderSnapshotData, ProtocolError> {
+    if bytes.len() < RENDER_HEADER_LEN {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::Truncated,
+            bytes.len(),
+        ));
+    }
+    if bytes.len() > MAX_RENDER_BYTES {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidTotalLength,
+            16,
+        ));
+    }
+    if bytes[..8] != RENDER_MAGIC {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidMagic, 0));
+    }
+    if read_u16(bytes, 8)? != PROTOCOL_VERSION {
+        return Err(ProtocolError::new(ProtocolErrorCode::UnsupportedVersion, 8));
+    }
+    if read_u16(bytes, 10)? != RENDER_HEADER_LEN as u16 {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidRegion, 10));
+    }
+    let total_byte_length = read_u32(bytes, 16)?;
+    if usize::try_from(total_byte_length)
+        .ok()
+        .is_none_or(|length| length != bytes.len())
+    {
+        return Err(ProtocolError::new(
+            ProtocolErrorCode::InvalidTotalLength,
+            16,
+        ));
+    }
+    let entity_count = read_u32(bytes, 40)?;
+    let entity_capacity = read_u32(bytes, 44)?;
+    if entity_count > entity_capacity {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidRegion, 44));
+    }
+    let region_count = usize::from(read_u16(bytes, 52)?);
+    let descriptor_size = read_u16(bytes, 54)?;
+    if descriptor_size != RENDER_REGION_DESCRIPTOR_LEN as u16 {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidRegion, 54));
+    }
+    let region_table_offset = usize::try_from(read_u32(bytes, 56)?).unwrap_or(usize::MAX);
+    let region_table_end = region_table_offset
+        .checked_add(
+            region_count
+                .checked_mul(descriptor_size as usize)
+                .ok_or(ProtocolError::new(ProtocolErrorCode::InvalidRegion, 56))?,
+        )
+        .ok_or(ProtocolError::new(ProtocolErrorCode::InvalidRegion, 56))?;
+    if region_table_offset < RENDER_HEADER_LEN || region_table_end > bytes.len() {
+        return Err(ProtocolError::new(ProtocolErrorCode::InvalidRegion, 56));
+    }
+
+    let mut regions = Vec::with_capacity(region_count);
+    let mut intervals: Vec<(u32, u32)> = Vec::with_capacity(region_count);
+    let mut kinds = std::collections::BTreeSet::new();
+    for index in 0..region_count {
+        let region = read_render_region(
+            bytes,
+            bytes.len(),
+            region_table_offset,
+            region_table_end,
+            descriptor_size as usize,
+            index,
+            &mut intervals,
+        )?;
+        if !kinds.insert(region.kind) {
+            return Err(ProtocolError::new(
+                ProtocolErrorCode::InvalidRegion,
+                region.offset as usize,
+            ));
+        }
+        regions.push(region);
+    }
+
+    let find_region =
+        |kind: RenderRegionKind| regions.iter().find(|region| region.kind == kind).copied();
+
+    let entities = if entity_count == 0 {
+        Vec::new()
+    } else {
+        #[rustfmt::skip]
+        let required = [
+            (RenderRegionKind::EntitySlot, RenderScalarType::U32, 1),
+            (RenderRegionKind::EntityGeneration, RenderScalarType::U32, 1),
+            (RenderRegionKind::Position, RenderScalarType::I32, 3),
+            (RenderRegionKind::RotationQuaternion, RenderScalarType::F32, 4),
+            (RenderRegionKind::Scale, RenderScalarType::F32, 3),
+            (RenderRegionKind::VisualType, RenderScalarType::U32, 1),
+            (RenderRegionKind::RenderFlags, RenderScalarType::U32, 1),
+        ];
+        for (kind, scalar_type, component_count) in required {
+            let region =
+                find_region(kind).ok_or(ProtocolError::new(ProtocolErrorCode::InvalidRegion, 0))?;
+            if region.scalar_type != scalar_type || region.component_count != component_count {
+                return Err(ProtocolError::new(
+                    ProtocolErrorCode::InvalidRegion,
+                    region.offset as usize,
+                ));
+            }
+            if region.element_count != entity_count {
+                return Err(ProtocolError::new(
+                    ProtocolErrorCode::InvalidRegion,
+                    region.offset as usize,
+                ));
+            }
+        }
+        let slots = find_region(RenderRegionKind::EntitySlot).expect("validated above");
+        let generations = find_region(RenderRegionKind::EntityGeneration).expect("validated above");
+        let positions = find_region(RenderRegionKind::Position).expect("validated above");
+        let rotations = find_region(RenderRegionKind::RotationQuaternion).expect("validated above");
+        let scales = find_region(RenderRegionKind::Scale).expect("validated above");
+        let visual_types = find_region(RenderRegionKind::VisualType).expect("validated above");
+        let render_flags = find_region(RenderRegionKind::RenderFlags).expect("validated above");
+        let read_u32_at = |region: RenderRegionDescriptor, index: usize| {
+            let offset = region.offset as usize + index * 4;
+            u32::from_le_bytes(
+                bytes[offset..offset + 4]
+                    .try_into()
+                    .expect("validated bounds"),
+            )
+        };
+        let read_i32_at = |region: RenderRegionDescriptor, index: usize| {
+            let offset = region.offset as usize + index * 4;
+            i32::from_le_bytes(
+                bytes[offset..offset + 4]
+                    .try_into()
+                    .expect("validated bounds"),
+            )
+        };
+        let read_f32_at = |region: RenderRegionDescriptor, index: usize| {
+            let offset = region.offset as usize + index * 4;
+            f32::from_le_bytes(
+                bytes[offset..offset + 4]
+                    .try_into()
+                    .expect("validated bounds"),
+            )
+        };
+        let mut rows = Vec::with_capacity(entity_count as usize);
+        let mut slots_seen = std::collections::BTreeSet::new();
+        for index in 0..entity_count as usize {
+            let slot = read_u32_at(slots, index);
+            let generation = read_u32_at(generations, index);
+            if generation == 0 {
+                return Err(ProtocolError::new(
+                    ProtocolErrorCode::InvalidRegion,
+                    generations.offset as usize + index * 4,
+                ));
+            }
+            if !slots_seen.insert(slot) {
+                return Err(ProtocolError::new(
+                    ProtocolErrorCode::InvalidRegion,
+                    slots.offset as usize + index * 4,
+                ));
+            }
+            rows.push(RenderEntityRecord {
+                slot,
+                generation,
+                position: GridPosition::new(
+                    read_i32_at(positions, index * 3),
+                    read_i32_at(positions, index * 3 + 1),
+                    read_i32_at(positions, index * 3 + 2),
+                ),
+                rotation: [
+                    read_f32_at(rotations, index * 4),
+                    read_f32_at(rotations, index * 4 + 1),
+                    read_f32_at(rotations, index * 4 + 2),
+                    read_f32_at(rotations, index * 4 + 3),
+                ],
+                scale: [
+                    read_f32_at(scales, index * 3),
+                    read_f32_at(scales, index * 3 + 1),
+                    read_f32_at(scales, index * 3 + 2),
+                ],
+                visual_type: read_u32_at(visual_types, index),
+                render_flags: read_u32_at(render_flags, index),
+            });
+        }
+        rows
+    };
+
+    let occupied_cells = match find_region(RenderRegionKind::OccupiedCell) {
+        Some(region) => {
+            if region.scalar_type != RenderScalarType::I32 || region.component_count != 3 {
+                return Err(ProtocolError::new(
+                    ProtocolErrorCode::InvalidRegion,
+                    region.offset as usize,
+                ));
+            }
+            let mut cells = Vec::with_capacity(region.element_count as usize);
+            for index in 0..region.element_count as usize {
+                let offset = region.offset as usize + index * 12;
+                cells.push(GridPosition::new(
+                    i32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap_or_default()),
+                    i32::from_le_bytes(
+                        bytes[offset + 4..offset + 8].try_into().unwrap_or_default(),
+                    ),
+                    i32::from_le_bytes(
+                        bytes[offset + 8..offset + 12]
+                            .try_into()
+                            .unwrap_or_default(),
+                    ),
+                ));
+            }
+            cells
+        }
+        None => Vec::new(),
+    };
+
+    Ok(RenderSnapshotData {
+        total_byte_length,
+        world_generation: read_u32(bytes, 20)?,
+        snapshot_generation: read_u64(bytes, 24)?,
+        simulation_tick: read_u64(bytes, 32)?,
+        entity_count,
+        entity_capacity,
+        memory_generation: read_u32(bytes, 48)?,
+        regions,
+        entities,
+        occupied_cells,
+    })
+}
+
 /// Decodes and validates a render memory descriptor.
 pub fn decode_render_descriptor(bytes: &[u8]) -> Result<RenderSnapshotDescriptor, ProtocolError> {
     if bytes.len() != RENDER_DESCRIPTOR_LEN {
@@ -1318,6 +1773,13 @@ fn read_array<const N: usize>(bytes: &[u8], offset: usize) -> Result<[u8; N], Pr
         .ok_or(ProtocolError::new(ProtocolErrorCode::Truncated, offset))
 }
 
+fn read_u8(bytes: &[u8], offset: usize) -> Result<u8, ProtocolError> {
+    bytes
+        .get(offset)
+        .copied()
+        .ok_or(ProtocolError::new(ProtocolErrorCode::Truncated, offset))
+}
+
 fn read_u16(bytes: &[u8], offset: usize) -> Result<u16, ProtocolError> {
     Ok(u16::from_le_bytes(read_array(bytes, offset)?))
 }
@@ -1429,6 +1891,28 @@ mod tests {
         assert_eq!(&encoded[20..28], &20_u64.to_le_bytes());
         assert_eq!(&encoded[28..60], &[0xabu8; 32]);
         assert_eq!(&encoded[60..64], &(RESPONSE_LEN as u32).to_le_bytes());
+    }
+
+    #[test]
+    fn command_response_round_trips_and_rejects_foreign_bytes() {
+        let response = CommandResponse {
+            batch_sequence: 3,
+            tick: 20,
+            state_hash: [0xabu8; 32],
+        };
+        let mut encoded = encode_command_response(response);
+        assert_eq!(decode_command_response(&encoded), Ok(response));
+        encoded[7] ^= 0xff;
+        assert_eq!(
+            decode_command_response(&encoded),
+            Err(ProtocolError::new(ProtocolErrorCode::InvalidMagic, 0))
+        );
+        encoded[7] ^= 0xff;
+        encoded[10] = 1;
+        assert_eq!(
+            decode_command_response(&encoded),
+            Err(ProtocolError::new(ProtocolErrorCode::UnsupportedFlags, 10))
+        );
     }
 
     #[test]

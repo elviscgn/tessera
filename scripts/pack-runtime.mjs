@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { gzip } from 'pako';
 import { join, relative, resolve } from 'node:path';
+import { gzip } from 'pako';
 
 const repositoryRoot = resolve(import.meta.dirname, '..');
 const packageJson = JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8'));

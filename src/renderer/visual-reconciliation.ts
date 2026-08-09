@@ -1,4 +1,4 @@
-import type { RenderEntityRecord, RenderSnapshotMetadata } from '../worker/data-protocol';
+import type { RenderEntityRecord, RenderSnapshotMetadata } from '../worker/protocol-types';
 
 /** The presentation mapping retained for one slot in the renderer. */
 export interface VisualMapping {

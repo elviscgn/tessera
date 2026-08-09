@@ -2,7 +2,7 @@ import type { FoundationDiagnostics, FoundationRuntime } from '../browser/founda
 import { viewportForCanvas } from '../browser/canvas-viewport';
 import type { CameraState, CameraViewport } from '../renderer/isometric-camera';
 import { formatEntityId, type ScreenBounds } from '../renderer/entity-selection';
-import type { RenderEntityRecord, RenderGridCell } from '../worker/data-protocol';
+import type { RenderEntityRecord, RenderGridCell } from '../worker/protocol-types';
 
 export interface AnnotatedOverlayOptions {
   readonly enabled?: boolean;

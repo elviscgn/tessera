@@ -69,8 +69,8 @@ test('runs renderer stress and boundary metrics without changing the lab contrac
 
   await openLab(page, 'Boundary');
   await page.getByRole('button', { name: 'Refresh metrics', exact: true }).click();
-  await expect(page.locator('#boundaryResult')).toContainText('memory generation');
-  await expect(page.locator('#metricViewRecreations')).not.toHaveText('—');
+  await expect(page.locator('#boundaryResult')).toContainText('render snapshots');
+  await expect(page.locator('#metricEventBatches')).not.toHaveText('—');
 });
 
 test('preserves the active world on a failed save import and reports errors', async ({ page }) => {

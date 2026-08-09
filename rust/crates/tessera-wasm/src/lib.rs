@@ -3,17 +3,23 @@
 //! Coarse wasm-bindgen adapter for the browser simulation Worker.
 
 mod arena;
+mod codec;
 
 pub use arena::{ARENA_WASM_ADAPTER_VERSION, ArenaWasm, MAX_ARENA_TICKS_PER_CALL};
+pub use codec::{
+    command_response_json, event_batch_json, parse_command_batch_json, parse_placement_json,
+    placement_response_json, render_snapshot_json,
+};
 
 use tessera_core::{
     Footprint, FootprintError, FootprintOffset, GridConfigurationError, GridPosition, QuarterTurn,
     SaveError, Seed, Simulation, SimulationError,
 };
 use tessera_protocol::{
-    CommandResponse, PlacementValidationResponse, ProtocolError, RenderSnapshotDescriptor,
-    decode_command_batch, encode_command_response, encode_event_batch, encode_placement_validation,
-    encode_render_descriptor, encode_render_snapshot_with_occupied_cells,
+    CommandResponse, PlacementValidationResponse, ProtocolError, decode_command_batch,
+    decode_command_response, decode_event_batch, decode_placement_validation,
+    decode_render_snapshot, encode_command_batch, encode_command_response, encode_event_batch,
+    encode_placement_validation, encode_render_snapshot_with_occupied_cells,
 };
 use wasm_bindgen::prelude::*;
 
@@ -53,14 +59,80 @@ impl TesseraWasm {
         })
     }
 
-    /// Decodes one binary command batch, schedules it, advances bounded exact ticks, and
-    /// returns a fixed-size binary response containing the canonical state hash.
-    pub fn run_command_batch(
+    /// Decodes one semantic JSON command batch, schedules it, advances bounded
+    /// exact ticks, and returns the validated response as JSON.
+    pub fn run_command_batch_json(
         &mut self,
-        command_batch: &[u8],
+        json: &str,
         exact_ticks: u32,
-    ) -> Result<Vec<u8>, JsValue> {
-        self.run_command_batch_inner(command_batch, exact_ticks)
+    ) -> Result<String, JsValue> {
+        self.run_command_batch_json_inner(json, exact_ticks)
+            .map_err(|message| JsValue::from_str(&message))
+    }
+
+    fn run_command_batch_json_inner(
+        &mut self,
+        json: &str,
+        exact_ticks: u32,
+    ) -> Result<String, String> {
+        let batch = parse_command_batch_json(json)?;
+        let encoded =
+            encode_command_batch(&batch).map_err(|error| protocol_error_text("command", error))?;
+        let response_bytes = self.run_command_batch_inner(&encoded, exact_ticks)?;
+        let response = decode_command_response(&response_bytes)
+            .map_err(|error| protocol_error_text("command", error))?;
+        Ok(command_response_json(
+            response.batch_sequence,
+            response.tick,
+            &response.state_hash,
+        ))
+    }
+
+    /// Queries authoritative occupancy for a prospective JSON placement.
+    pub fn validate_placement_json(&self, json: &str) -> Result<String, JsValue> {
+        self.validate_placement_json_inner(json)
+            .map_err(|message| JsValue::from_str(&message))
+    }
+
+    fn validate_placement_json_inner(&self, json: &str) -> Result<String, String> {
+        let (object_type, position, rotation) = parse_placement_json(json)?;
+        let encoded = self.validate_placement_inner(
+            object_type,
+            position.x,
+            position.z,
+            position.elevation_mm,
+            rotation.as_u8(),
+        )?;
+        let response = decode_placement_validation(&encoded)
+            .map_err(|error| protocol_error_text("placement", error))?;
+        Ok(placement_response_json(&response))
+    }
+
+    /// Returns ordered event records after the requested sequence as JSON metadata.
+    pub fn event_batch_json(
+        &self,
+        after_sequence: u64,
+        max_events: u32,
+    ) -> Result<String, JsValue> {
+        self.event_batch_json_inner(after_sequence, max_events)
+            .map_err(|message| JsValue::from_str(&message))
+    }
+
+    fn event_batch_json_inner(
+        &self,
+        after_sequence: u64,
+        max_events: u32,
+    ) -> Result<String, String> {
+        let bytes = self.event_batch_inner(after_sequence, max_events)?;
+        let batch =
+            decode_event_batch(&bytes).map_err(|error| protocol_error_text("events", error))?;
+        Ok(event_batch_json(&batch))
+    }
+
+    /// Builds a fresh packed snapshot into the double buffer and returns the
+    /// decoded, validated host form as JSON.
+    pub fn render_snapshot_json(&mut self) -> Result<String, JsValue> {
+        self.render_snapshot_json_inner()
             .map_err(|message| JsValue::from_str(&message))
     }
 
@@ -71,19 +143,6 @@ impl TesseraWasm {
         footprint_offsets: &[i32],
     ) -> Result<u32, JsValue> {
         self.register_object_type_inner(id, footprint_offsets)
-            .map_err(|message| JsValue::from_str(&message))
-    }
-
-    /// Queries authoritative occupancy for a prospective placement without mutation.
-    pub fn validate_placement(
-        &self,
-        object_type: u32,
-        x: i32,
-        z: i32,
-        elevation_mm: i32,
-        rotation: u8,
-    ) -> Result<Vec<u8>, JsValue> {
-        self.validate_placement_inner(object_type, x, z, elevation_mm, rotation)
             .map_err(|message| JsValue::from_str(&message))
     }
 
@@ -136,18 +195,6 @@ impl TesseraWasm {
     /// Returns the adapter contract version used by the Worker readiness message.
     pub fn adapter_version(&self) -> u16 {
         WASM_ADAPTER_VERSION
-    }
-
-    /// Builds the latest packed snapshot and returns a descriptor into Wasm memory.
-    pub fn render_snapshot_descriptor(&mut self) -> Result<Vec<u8>, JsValue> {
-        self.render_snapshot_descriptor_inner()
-            .map_err(|message| JsValue::from_str(&message))
-    }
-
-    /// Returns ordered event records after the requested sequence.
-    pub fn event_batch(&self, after_sequence: u64, max_events: u32) -> Result<Vec<u8>, JsValue> {
-        self.event_batch_inner(after_sequence, max_events)
-            .map_err(|message| JsValue::from_str(&message))
     }
 
     /// Acknowledges the highest contiguous event sequence consumed by the host.
@@ -318,7 +365,14 @@ impl TesseraWasm {
         }))
     }
 
-    fn render_snapshot_descriptor_inner(&mut self) -> Result<Vec<u8>, String> {
+    fn render_snapshot_json_inner(&mut self) -> Result<String, String> {
+        let bytes = self.build_render_snapshot_bytes()?;
+        let snapshot = decode_render_snapshot(&bytes)
+            .map_err(|error| protocol_error_text("snapshot", error))?;
+        Ok(render_snapshot_json(&snapshot))
+    }
+
+    fn build_render_snapshot_bytes(&mut self) -> Result<Vec<u8>, String> {
         if self.disposed {
             return Err(adapter_error_text(
                 "snapshot",
@@ -348,30 +402,7 @@ impl TesseraWasm {
             &mut self.render_snapshot_front,
             &mut self.render_snapshot_back,
         );
-        let pointer =
-            u32::try_from(self.render_snapshot_front.as_ptr() as usize).map_err(|_| {
-                adapter_error_text(
-                    "snapshot",
-                    "pointer_overflow",
-                    "snapshot pointer exceeds u32",
-                )
-            })?;
-        let byte_length = u32::try_from(self.render_snapshot_front.len()).map_err(|_| {
-            adapter_error_text("snapshot", "length_overflow", "snapshot length exceeds u32")
-        })?;
-        let capacity = u32::try_from(self.render_snapshot_front.capacity()).map_err(|_| {
-            adapter_error_text(
-                "snapshot",
-                "capacity_overflow",
-                "snapshot capacity exceeds u32",
-            )
-        })?;
-        Ok(encode_render_descriptor(RenderSnapshotDescriptor {
-            pointer,
-            byte_length,
-            capacity,
-            snapshot_generation: self.snapshot_generation,
-        }))
+        Ok(self.render_snapshot_front.clone())
     }
 
     fn event_batch_inner(&self, after_sequence: u64, max_events: u32) -> Result<Vec<u8>, String> {
@@ -626,6 +657,59 @@ mod tests {
         assert!(result.valid);
         assert_eq!(result.occupied_cell_count, 2);
         assert_eq!(result.object_type, 1);
+    }
+
+    #[test]
+    fn json_adapter_surface_decodes_authoritative_responses() {
+        let mut adapter = TesseraWasm::new(&[7; 32]).unwrap();
+        let response = adapter
+            .run_command_batch_json_inner(
+                r#"{"batchSequence":1,"commands":[{"kind":"spawn","payload":{"clientSequence":1,"objectType":1,"x":0,"z":0,"elevationMm":0,"rotation":0}}]}"#,
+                1,
+            )
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(value["batchSequence"], 1);
+        assert_eq!(value["tick"], 1);
+        assert_eq!(
+            value["stateHashHex"].as_str().unwrap(),
+            "1d58e8e0cf937e92279a5206ca3d4e8d24b046b9545568695bc262dd0ed4967c"
+        );
+
+        let events = adapter
+            .event_batch_json_inner(0, MAX_EVENT_RECORD_COUNT)
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_str(&events).unwrap();
+        assert_eq!(value["firstSequence"], 1);
+        assert_eq!(value["lastSequence"], 2);
+        assert_eq!(value["recordCount"], 2);
+
+        let snapshot = adapter.render_snapshot_json_inner().unwrap();
+        let value: serde_json::Value = serde_json::from_str(&snapshot).unwrap();
+        assert_eq!(value["entityCount"], 1);
+        assert_eq!(value["entities"][0]["slot"], 0);
+        assert_eq!(value["entities"][0]["generation"], 1);
+        assert_eq!(value["entities"][0]["visualType"], 1);
+        assert_eq!(value["entities"][0]["x"], 0);
+        assert_eq!(value["occupiedCells"][0]["x"], 0);
+        assert_eq!(value["regions"].as_array().unwrap().len(), 10);
+
+        let placement = adapter
+            .validate_placement_json_inner(
+                r#"{"objectType":1,"x":2,"z":-3,"elevationMm":0,"rotation":1}"#,
+            )
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_str(&placement).unwrap();
+        assert_eq!(value["valid"], true);
+        assert_eq!(value["occupiedCellCount"], 1);
+
+        let error = adapter
+            .run_command_batch_json_inner(
+                r#"{"batchSequence":1,"commands":[{"kind":"unknown","payload":{}}]}"#,
+                1,
+            )
+            .unwrap_err();
+        assert!(error.contains("json:"));
     }
 
     #[test]
