@@ -331,16 +331,8 @@ const handleLoad = (request: Extract<WorkerRequest, { type: 'load' }>): void => 
 };
 
 const handleCommand = (request: CommandRequest): void => {
-  if (!simulation || fatal) {
-    postError(
-      'command-error',
-      'command',
-      fatal ? 'worker_fatal' : 'not_ready',
-      fatal
-        ? 'the Worker is in a fatal state and requires restart'
-        : 'the Worker has not completed startup',
-      request.requestId,
-    );
+  const sim = readySimulation(request.requestId);
+  if (!sim) {
     return;
   }
   commandCalls += 1;
@@ -360,7 +352,7 @@ const handleCommand = (request: CommandRequest): void => {
     return;
   }
   try {
-    const responseJson = simulation.run_command_batch_json(request.commands, request.exactTicks);
+    const responseJson = sim.run_command_batch_json(request.commands, request.exactTicks);
     const parsed: unknown = JSON.parse(responseJson);
     if (typeof parsed !== 'object' || parsed === null) {
       throw new Error('tessera:command:invalid_json:command response is not a JSON object');
@@ -377,39 +369,51 @@ const handleCommand = (request: CommandRequest): void => {
     publishEvents(highestAcknowledgedEvent);
     publishRenderSnapshot();
   } catch (error: unknown) {
-    const failure = parseWasmError(error);
-    if (failure.type === 'fatal-error') {
-      fatal = true;
-      simulation.free();
-      simulation = undefined;
-    }
-    postError(
-      failure.type,
-      failure.type === 'fatal-error' ? 'fatal' : 'command',
-      failure.code,
-      failure.message,
-      request.requestId,
-    );
+    reportFailure(error, 'command', request.requestId);
   }
+};
+
+const readySimulation = (requestId: number): TesseraWasm | undefined => {
+  if (simulation && !fatal) {
+    return simulation;
+  }
+  postError(
+    'command-error',
+    'command',
+    fatal ? 'worker_fatal' : 'not_ready',
+    fatal
+      ? 'the Worker is in a fatal state and requires restart'
+      : 'the Worker has not completed startup',
+    requestId,
+  );
+  return undefined;
+};
+
+const reportFailure = (error: unknown, phase: 'startup' | 'command', requestId?: number): void => {
+  const failure = parseWasmError(error);
+  if (failure.type === 'fatal-error') {
+    fatal = true;
+    simulation?.free();
+    simulation = undefined;
+  }
+  postError(
+    failure.type,
+    failure.type === 'fatal-error' ? 'fatal' : phase,
+    failure.code,
+    failure.message,
+    requestId,
+  );
 };
 
 const handlePlacementValidation = (
   request: Extract<WorkerRequest, { type: 'validate-placement' }>,
 ): void => {
-  if (!simulation || fatal) {
-    postError(
-      'command-error',
-      'command',
-      fatal ? 'worker_fatal' : 'not_ready',
-      fatal
-        ? 'the Worker is in a fatal state and requires restart'
-        : 'the Worker has not completed startup',
-      request.requestId,
-    );
+  const sim = readySimulation(request.requestId);
+  if (!sim) {
     return;
   }
   try {
-    const responseJson = simulation.validate_placement_json(JSON.stringify(request.input));
+    const responseJson = sim.validate_placement_json(JSON.stringify(request.input));
     const parsed: unknown = JSON.parse(responseJson);
     if (typeof parsed !== 'object' || parsed === null) {
       throw new Error('tessera:placement:invalid_json:placement response is not a JSON object');
@@ -422,19 +426,7 @@ const handlePlacementValidation = (
       metrics: metrics(),
     });
   } catch (error: unknown) {
-    const failure = parseWasmError(error);
-    if (failure.type === 'fatal-error') {
-      fatal = true;
-      simulation.free();
-      simulation = undefined;
-    }
-    postError(
-      failure.type,
-      failure.type === 'fatal-error' ? 'fatal' : 'command',
-      failure.code,
-      failure.message,
-      request.requestId,
-    );
+    reportFailure(error, 'command', request.requestId);
   }
 };
 
