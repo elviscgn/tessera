@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { gzipSync } from 'node:zlib';
+import { gzip } from 'pako';
 
 const repositoryRoot = resolve(import.meta.dirname, '..');
 const packageJson = JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8'));
@@ -80,7 +80,7 @@ for (const path of entryPaths) {
 }
 tarBuffers.push(zeroBlock, zeroBlock);
 const tar = Buffer.concat(tarBuffers);
-const compressed = gzipSync(tar, { mtime: 0, level: 9 });
+const compressed = gzip(tar, { mtime: 0, level: 9 });
 mkdirSync(outputDir, { recursive: true });
 writeFileSync(outputPath, Buffer.from(compressed));
 console.log(`packed ${archiveName} to ${outputPath}`);
