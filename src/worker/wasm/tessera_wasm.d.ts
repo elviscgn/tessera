@@ -96,6 +96,10 @@ export class TesseraWasm {
      */
     event_batch(after_sequence: bigint, max_events: number): Uint8Array;
     /**
+     * Returns ordered event records after the requested sequence as JSON metadata.
+     */
+    event_batch_json(after_sequence: bigint, max_events: number): string;
+    /**
      * Returns the highest event sequence currently retained by the simulation.
      */
     latest_event_sequence(): bigint;
@@ -120,10 +124,20 @@ export class TesseraWasm {
      */
     render_snapshot_descriptor(): Uint8Array;
     /**
+     * Builds a fresh packed snapshot into the double buffer and returns the
+     * decoded, validated host form as JSON.
+     */
+    render_snapshot_json(): string;
+    /**
      * Decodes one binary command batch, schedules it, advances bounded exact ticks, and
      * returns a fixed-size binary response containing the canonical state hash.
      */
     run_command_batch(command_batch: Uint8Array, exact_ticks: number): Uint8Array;
+    /**
+     * Decodes one command batch, schedules it, advances bounded exact ticks,
+     * and returns the validated response as semantic JSON.
+     */
+    run_command_batch_json(json: string, exact_ticks: number): string;
     /**
      * Serializes the current authoritative state without mutating it.
      */
@@ -140,6 +154,10 @@ export class TesseraWasm {
      * Queries authoritative occupancy for a prospective placement without mutation.
      */
     validate_placement(object_type: number, x: number, z: number, elevation_mm: number, rotation: number): Uint8Array;
+    /**
+     * Queries authoritative occupancy for a prospective JSON placement.
+     */
+    validate_placement_json(json: string): string;
     /**
      * Returns the current reset/world generation.
      */
@@ -172,17 +190,21 @@ export interface InitOutput {
     readonly tesserawasm_adapter_version: (a: number) => number;
     readonly tesserawasm_dispose: (a: number) => void;
     readonly tesserawasm_event_batch: (a: number, b: bigint, c: number) => [number, number, number, number];
+    readonly tesserawasm_event_batch_json: (a: number, b: bigint, c: number) => [number, number, number, number];
     readonly tesserawasm_latest_event_sequence: (a: number) => bigint;
     readonly tesserawasm_load_state: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
     readonly tesserawasm_new: (a: number, b: number) => [number, number, number];
     readonly tesserawasm_next_client_sequence: (a: number) => bigint;
     readonly tesserawasm_register_object_type: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly tesserawasm_render_snapshot_descriptor: (a: number) => [number, number, number, number];
+    readonly tesserawasm_render_snapshot_json: (a: number) => [number, number, number, number];
     readonly tesserawasm_run_command_batch: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly tesserawasm_run_command_batch_json: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly tesserawasm_save_state: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
     readonly tesserawasm_state_hash: (a: number) => [number, number];
     readonly tesserawasm_tick: (a: number) => bigint;
     readonly tesserawasm_validate_placement: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly tesserawasm_validate_placement_json: (a: number, b: number, c: number) => [number, number, number, number];
     readonly tesserawasm_world_generation: (a: number) => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __externref_table_dealloc: (a: number) => void;

@@ -130,6 +130,13 @@ impl TesseraWasm {
         Ok(event_batch_json(&batch))
     }
 
+    /// Builds a fresh packed snapshot into the double buffer and returns the
+    /// decoded, validated host form as JSON.
+    pub fn render_snapshot_json(&mut self) -> Result<String, JsValue> {
+        self.render_snapshot_json_inner()
+            .map_err(|message| JsValue::from_str(&message))
+    }
+
     /// Decodes one binary command batch, schedules it, advances bounded exact ticks, and
     /// returns a fixed-size binary response containing the canonical state hash.
     pub fn run_command_batch(
@@ -425,11 +432,6 @@ impl TesseraWasm {
 
     /// Builds a fresh packed snapshot into the double buffer and returns the
     /// decoded, validated host form as JSON.
-    pub fn render_snapshot_json(&mut self) -> Result<String, JsValue> {
-        self.render_snapshot_json_inner()
-            .map_err(|message| JsValue::from_str(&message))
-    }
-
     fn render_snapshot_json_inner(&mut self) -> Result<String, String> {
         let bytes = self.build_render_snapshot_bytes()?;
         let snapshot = decode_render_snapshot(&bytes)
