@@ -21,52 +21,6 @@ export interface WorkerObjectTypeDefinition {
   readonly footprint: readonly number[];
 }
 
-/** Semantic JSON form of one spawn command record. */
-export interface SpawnCommandJson {
-  readonly kind: 'spawn';
-  readonly payload: {
-    readonly clientSequence: bigint;
-    readonly objectType: number;
-    readonly x: number;
-    readonly z: number;
-    readonly elevationMm: number;
-    readonly rotation: number;
-  };
-}
-
-/** Semantic JSON form of one move command record. */
-export interface MoveCommandJson {
-  readonly kind: 'move';
-  readonly payload: {
-    readonly clientSequence: bigint;
-    readonly slot: number;
-    readonly generation: number;
-    readonly x: number;
-    readonly z: number;
-    readonly elevationMm: number;
-    readonly rotation: number;
-  };
-}
-
-/** Semantic JSON form of one removal command record. */
-export interface RemoveCommandJson {
-  readonly kind: 'remove';
-  readonly payload: {
-    readonly clientSequence: bigint;
-    readonly slot: number;
-    readonly generation: number;
-  };
-}
-
-export type CommandDocument = SpawnCommandJson | MoveCommandJson | RemoveCommandJson;
-
-export type CommandJson = CommandDocument;
-
-export interface CommandBatchJson {
-  readonly batchSequence: bigint;
-  readonly commands: readonly CommandJson[];
-}
-
 export interface PlacementValidationInputJson {
   readonly objectType: number;
   readonly x: number;

@@ -77,9 +77,7 @@ if (!rustMatch || !protocolMatch) {
 }
 const versions = new Set([rustMatch[1], protocolMatch[1]]);
 if (versions.size !== 1) {
-  fail(
-    `protocol version drift: Rust ${rustMatch[1]}, protocol-types ${protocolMatch[1]}`,
-  );
+  fail(`protocol version drift: Rust ${rustMatch[1]}, protocol-types ${protocolMatch[1]}`);
 }
 
 const requiredDocs = [

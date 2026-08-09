@@ -212,16 +212,6 @@ export class TesseraWasm {
         wasm.tesserawasm_dispose(this.__wbg_ptr);
     }
     /**
-     * Returns ordered event records after the requested sequence.
-     * @param {bigint} after_sequence
-     * @param {number} max_events
-     * @returns {Uint8Array}
-     */
-    event_batch(after_sequence, max_events) {
-        const ret = wasm.tesserawasm_event_batch(this.__wbg_ptr, after_sequence, max_events);
-        return readU8Result(ret);
-    }
-    /**
      * Returns ordered event records after the requested sequence as JSON metadata.
      * @param {bigint} after_sequence
      * @param {number} max_events
@@ -316,14 +306,6 @@ export class TesseraWasm {
         return ret[0] >>> 0;
     }
     /**
-     * Builds the latest packed snapshot and returns a descriptor into Wasm memory.
-     * @returns {Uint8Array}
-     */
-    render_snapshot_descriptor() {
-        const ret = wasm.tesserawasm_render_snapshot_descriptor(this.__wbg_ptr);
-        return readU8Result(ret);
-    }
-    /**
      * Builds a fresh packed snapshot into the double buffer and returns the
      * decoded, validated host form as JSON.
      * @returns {string}
@@ -347,21 +329,8 @@ export class TesseraWasm {
         }
     }
     /**
-     * Decodes one binary command batch, schedules it, advances bounded exact ticks, and
-     * returns a fixed-size binary response containing the canonical state hash.
-     * @param {Uint8Array} command_batch
-     * @param {number} exact_ticks
-     * @returns {Uint8Array}
-     */
-    run_command_batch(command_batch, exact_ticks) {
-        const ptr0 = passArray8ToWasm0(command_batch, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.tesserawasm_run_command_batch(this.__wbg_ptr, ptr0, len0, exact_ticks);
-        return readU8Result(ret);
-    }
-    /**
-     * Decodes one command batch, schedules it, advances bounded exact ticks,
-     * and returns the validated response as semantic JSON.
+     * Decodes one semantic JSON command batch, schedules it, advances bounded
+     * exact ticks, and returns the validated response as JSON.
      * @param {string} json
      * @param {number} exact_ticks
      * @returns {string}
@@ -426,19 +395,6 @@ export class TesseraWasm {
     tick() {
         const ret = wasm.tesserawasm_tick(this.__wbg_ptr);
         return BigInt.asUintN(64, ret);
-    }
-    /**
-     * Queries authoritative occupancy for a prospective placement without mutation.
-     * @param {number} object_type
-     * @param {number} x
-     * @param {number} z
-     * @param {number} elevation_mm
-     * @param {number} rotation
-     * @returns {Uint8Array}
-     */
-    validate_placement(object_type, x, z, elevation_mm, rotation) {
-        const ret = wasm.tesserawasm_validate_placement(this.__wbg_ptr, object_type, x, z, elevation_mm, rotation);
-        return readU8Result(ret);
     }
     /**
      * Queries authoritative occupancy for a prospective JSON placement.

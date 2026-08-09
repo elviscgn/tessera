@@ -16,11 +16,10 @@ use tessera_core::{
     SaveError, Seed, Simulation, SimulationError,
 };
 use tessera_protocol::{
-    CommandResponse, PlacementValidationResponse, ProtocolError, RenderSnapshotDescriptor,
-    decode_command_batch, decode_command_response, decode_event_batch, decode_placement_validation,
+    CommandResponse, PlacementValidationResponse, ProtocolError, decode_command_batch,
+    decode_command_response, decode_event_batch, decode_placement_validation,
     decode_render_snapshot, encode_command_batch, encode_command_response, encode_event_batch,
-    encode_placement_validation, encode_render_descriptor,
-    encode_render_snapshot_with_occupied_cells,
+    encode_placement_validation, encode_render_snapshot_with_occupied_cells,
 };
 use wasm_bindgen::prelude::*;
 
@@ -60,8 +59,8 @@ impl TesseraWasm {
         })
     }
 
-    /// Decodes one command batch, schedules it, advances bounded exact ticks,
-    /// and returns the validated response as semantic JSON.
+    /// Decodes one semantic JSON command batch, schedules it, advances bounded
+    /// exact ticks, and returns the validated response as JSON.
     pub fn run_command_batch_json(
         &mut self,
         json: &str,
@@ -137,17 +136,6 @@ impl TesseraWasm {
             .map_err(|message| JsValue::from_str(&message))
     }
 
-    /// Decodes one binary command batch, schedules it, advances bounded exact ticks, and
-    /// returns a fixed-size binary response containing the canonical state hash.
-    pub fn run_command_batch(
-        &mut self,
-        command_batch: &[u8],
-        exact_ticks: u32,
-    ) -> Result<Vec<u8>, JsValue> {
-        self.run_command_batch_inner(command_batch, exact_ticks)
-            .map_err(|message| JsValue::from_str(&message))
-    }
-
     /// Registers one declarative object type before the first command is run.
     pub fn register_object_type(
         &mut self,
@@ -155,19 +143,6 @@ impl TesseraWasm {
         footprint_offsets: &[i32],
     ) -> Result<u32, JsValue> {
         self.register_object_type_inner(id, footprint_offsets)
-            .map_err(|message| JsValue::from_str(&message))
-    }
-
-    /// Queries authoritative occupancy for a prospective placement without mutation.
-    pub fn validate_placement(
-        &self,
-        object_type: u32,
-        x: i32,
-        z: i32,
-        elevation_mm: i32,
-        rotation: u8,
-    ) -> Result<Vec<u8>, JsValue> {
-        self.validate_placement_inner(object_type, x, z, elevation_mm, rotation)
             .map_err(|message| JsValue::from_str(&message))
     }
 
@@ -220,18 +195,6 @@ impl TesseraWasm {
     /// Returns the adapter contract version used by the Worker readiness message.
     pub fn adapter_version(&self) -> u16 {
         WASM_ADAPTER_VERSION
-    }
-
-    /// Builds the latest packed snapshot and returns a descriptor into Wasm memory.
-    pub fn render_snapshot_descriptor(&mut self) -> Result<Vec<u8>, JsValue> {
-        self.render_snapshot_descriptor_inner()
-            .map_err(|message| JsValue::from_str(&message))
-    }
-
-    /// Returns ordered event records after the requested sequence.
-    pub fn event_batch(&self, after_sequence: u64, max_events: u32) -> Result<Vec<u8>, JsValue> {
-        self.event_batch_inner(after_sequence, max_events)
-            .map_err(|message| JsValue::from_str(&message))
     }
 
     /// Acknowledges the highest contiguous event sequence consumed by the host.
@@ -402,36 +365,6 @@ impl TesseraWasm {
         }))
     }
 
-    fn render_snapshot_descriptor_inner(&mut self) -> Result<Vec<u8>, String> {
-        self.build_render_snapshot_bytes()?;
-        let pointer =
-            u32::try_from(self.render_snapshot_front.as_ptr() as usize).map_err(|_| {
-                adapter_error_text(
-                    "snapshot",
-                    "pointer_overflow",
-                    "snapshot pointer exceeds u32",
-                )
-            })?;
-        let byte_length = u32::try_from(self.render_snapshot_front.len()).map_err(|_| {
-            adapter_error_text("snapshot", "length_overflow", "snapshot length exceeds u32")
-        })?;
-        let capacity = u32::try_from(self.render_snapshot_front.capacity()).map_err(|_| {
-            adapter_error_text(
-                "snapshot",
-                "capacity_overflow",
-                "snapshot capacity exceeds u32",
-            )
-        })?;
-        Ok(encode_render_descriptor(RenderSnapshotDescriptor {
-            pointer,
-            byte_length,
-            capacity,
-            snapshot_generation: self.snapshot_generation,
-        }))
-    }
-
-    /// Builds a fresh packed snapshot into the double buffer and returns the
-    /// decoded, validated host form as JSON.
     fn render_snapshot_json_inner(&mut self) -> Result<String, String> {
         let bytes = self.build_render_snapshot_bytes()?;
         let snapshot = decode_render_snapshot(&bytes)
